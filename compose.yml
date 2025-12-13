@@ -1,63 +1,178 @@
-
 services:
 
-  app:
-    build:
-      context: app
-      dockerfile: Dockerfile
+  # --- Infrastructure Layer ---
+  db:
+    image: postgres:15-alpine
+    container_name: sim-cityview-db
+    # パスワード不要の信頼できる接続
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_DB: gamedb
+    volumes:
+      - ./volume-db:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
-    ports:
-      - 5190:80 # メインサイト
-      - 5191:81 # 管理用サイト
 
-  screenshot:
-    build:
-      context: screenshot
-      dockerfile: Dockerfile
+  redis:
+    image: redis:7-alpine
+    container_name: sim-cityview-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - ./volume-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
+
+  storage:
+    image: nginx:alpine
+    container_name: sim-cityview-storage
+    volumes:
+      - ./volume-storage:/data
+      - ./nginx/webdav.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # --- Application Layer ---
+  backend:
+    build: ./backend
+    container_name: sim-cityview-backend
+    environment:
+      # パスワード不要の接続
+      DATABASE_URL: postgres://postgres@db:5432/gamedb
+      AIRFLOW_API_URL: http://airflow-webserver:8080/api/v1
+      STORAGE_URL: http://storage
+    # 管理画面は外部公開せず、メイン画面のみ公開
     ports:
-      - 5290:80
+      - "8000:8000"
+    volumes:
+      - ./volume-backend-logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      airflow-webserver:
+        condition: service_healthy
+    restart: unless-stopped
 
-  # 以下コピー元
+  # --- Airflow Layer ---
+  airflow-common: &airflow-common
+    build: ./airflow
+    environment:
+      # パスワード不要の接続
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres@db:5432/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://postgres@db:5432/airflow
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      # 認証無効化（信頼できる環境）
+      AIRFLOW__API__AUTH_BACKEND: airflow.api.auth.backend.default
+      BACKEND_INTERNAL_URL: http://backend:8002
+    volumes:
+      - ./volume-airflow-dags:/opt/airflow/dags
+      - ./volume-airflow-logs:/opt/airflow/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
-  # # 通常の実行環境
-  # # GUIを動かすために必要なライブラリが全て入っている
-  # # ただし、GUIに接続することはできない
-  # server-general:
-  #   build:
-  #     context: server
-  #     dockerfile: Dockerfile.general
-  #   restart: unless-stopped
-  #   ports:
-  #     - "13353:13353"
-  #   volumes:
-  #     - ./volume-bin:/app/bin
-  #     - ./volume-save:/root/simutrans
-  #   command:
-  #     /app/bin/simutrans-extended
-  #       -objects Pak128.Britain-Ex
-  #       -server 13353
-  #       -debug 2
-  #       -server_admin_pw ${NETTOOL_PASSWORD}
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: sim-cityview-airflow-web
+    command: webserver
+    # ローカル開発用にlocalhostのみ公開
+    ports:
+      - "127.0.0.1:8003:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
-  # # vncでGUIに接続できる実行環境
-  # # プロセス終了時に自動で復帰する機構付き
-  # server-vnc:
-  #   build:
-  #     context: server
-  #     dockerfile: Dockerfile.vnc
-  #   restart: unless-stopped
-  #   ports:
-  #     - "13353:13353"   # simutrans-extendedのポート
-  #     - "5900:5900"     # VNCのポート
-  #   volumes:
-  #     - ./volume-bin:/app/bin
-  #     - ./volume-save:/root/simutrans
-  #   environment:
-  #     - COMMAND=/app/bin/simutrans-extended
-  #       -objects Pak128.Britain-Ex
-  #       -server 13353
-  #       -fullscreen
-  #       -debug 2
-  #       -server_admin_pw ${NETTOOL_PASSWORD}
-  #   command: /app/start-vnc.sh
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: sim-cityview-airflow-scheduler
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # --- Airflow Worker Layer ---
+  airflow-worker-capture:
+    <<: *airflow-common
+    container_name: sim-cityview-worker-capture
+    command: celery worker -q capture --concurrency 2
+    deploy:
+      replicas: 2
+    environment:
+      DISPLAY: ":99"
+
+  airflow-worker-coords:
+    <<: *airflow-common
+    container_name: sim-cityview-worker-coords
+    command: celery worker -q coords --concurrency 2
+    deploy:
+      replicas: 2
+
+  airflow-worker-tiles:
+    <<: *airflow-common
+    container_name: sim-cityview-worker-tiles
+    command: celery worker -q tiles --concurrency 2
+    deploy:
+      replicas: 2
+
+  airflow-worker-cleanup:
+    <<: *airflow-common
+    container_name: sim-cityview-worker-cleanup
+    command: celery worker -q cleanup --concurrency 2
+    deploy:
+      replicas: 2
+
+  # --- Processing Service Layer ---
+  service-capture:
+    build: ./service-capture
+    environment:
+      STORAGE_URL: http://storage
+      GAME_EXECUTABLE: /app/game/simutrans
+      DISPLAY: ":99"
+    volumes:
+      - ./volume-game-data:/app/game-data
+      - ./volume-storage:/data
+    deploy:
+      replicas: 2
+    restart: unless-stopped
+
+  service-coords:
+    build: ./service-coords
+    environment:
+      STORAGE_URL: http://storage
+    volumes:
+      - ./volume-storage:/data
+    deploy:
+      replicas: 2
+    restart: unless-stopped
+
+  service-tiles:
+    build: ./service-tiles
+    environment:
+      STORAGE_URL: http://storage
+      AVIF_QUALITY: "30"
+    volumes:
+      - ./volume-storage:/data
+    deploy:
+      replicas: 2
+    restart: unless-stopped
