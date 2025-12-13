@@ -7,22 +7,14 @@
 
 ### 1.2 アーキテクチャの基本原則
 
-**依存関係の一方向性**
-```
-Browser → Backend → Airflow → Workers → Services → Storage
-```
-- すべての依存関係は一方向です。
-- 下位層から上位層への呼び出しは一切行いません。
-- データの永続化は、原則として Backend API を通じて行われます。
+**責務の明確化**
+- 各コンポーネントは特定の役割に特化し、責務を超えない。
+- データ永続化はBackendが一元管理し、整合性を保つ。
+- 処理サービス（service-*）はステートレスであり、外部状態に依存しない。
 
-**責務の分離**
-- **Backend**: ビジネスロジック、DB管理、Airflow制御、データ永続化APIの提供。
-- **Airflow**: ワークフロー管理、タスクオーケストレーション。
-- **Workers**: タスク実行、サービス呼び出し、Backend API経由での結果永続化。
-- **Services**: 専門処理のみ（DB接続なし、他コンテナ呼び出しなし）。
-- **Storage**: ファイル操作のみ。
-
----
+**変更耐性の確保**
+- 下位層の処理サービスは上位層の知識を持たない。
+- Airflow DAGの変更がBackendやサービスに影響しないように設計する。
 
 ## 2. コンテナ構成
 
@@ -44,34 +36,27 @@ Browser → Backend → Airflow → Workers → Services → Storage
 
 **データベース**:
 - `gamedb`: アプリケーションデータ
-  - `jobs`: ジョブ管理
-  - `savedatas`: ゲームのセーブデータ情報
-  - `screenshots`: スクリーンショットメタデータ
-  - `coordinates`: 座標推定結果
-  - `tiles`: タイルメタデータ
-  - `tile_dependencies`: タイル依存関係
-  - `screenshot_usage`: スクリーンショット使用状況
+  - `jobs`: ジョブ管理（job_id, game_id, save_data_name, status, created_at など）
+  - `savedatas`: セーブデータ情報
+  - `screenshots`: スクリーンショットと推定座標（screenshot_id, job_id, x, y, estimated_x, estimated_y, filepath, status など）
+  - `tiles`: タイルメタデータ（tile_id, job_id, z, x, y, filepath など）
 - `airflow`: Airflowメタデータ
   - `dag_run`: DAG実行履歴
   - `task_instance`: タスク実行状態
   - `xcom`: タスク間データ受け渡し
-
----
 
 #### redis
 **役割**: メッセージブローカー
 
 **責務**:
 - Celery（Airflow Worker）のタスクキュー管理
-- キュー: `capture`, `coords`, `tiles`, `default`
+- キュー: `capture`, `coords`, `tiles`, `cleanup`
 
 **接続元**:
 - airflow-scheduler（タスク投入）
 - airflow-worker-*（タスク取得）
 
 **ポート**: 6379
-
----
 
 #### storage
 **役割**: ファイルストレージサーバー（nginx + WebDAV）
@@ -106,14 +91,12 @@ Browser → Backend → Airflow → Workers → Services → Storage
 - service-capture（PUT）
 - service-coords（GET）
 - service-tiles（GET, PUT）
-- airflow-worker-tiles（DELETE）
+- airflow-worker-cleanup（DELETE）
 - backend（GET - タイル配信）
 
 **ポート**: 80
 
 **設定**: nginx WebDAV有効化、最大アップロードサイズ 50MB
-
----
 
 ### 2.2 アプリケーション層
 
@@ -124,6 +107,8 @@ Browser → Backend → Airflow → Workers → Services → Storage
 - ビジネスロジック実行
 - gamedb への読み書き
 - Airflow DAG起動
+- 管理画面/マップ閲覧画面のHTML配信
+- 静的ファイル（CSS、JavaScript等）の配信
 - タイル配信（storage へのリバースプロキシ）
 - 管理画面 API および内部 API 提供
 
@@ -134,32 +119,43 @@ Browser → Backend → Airflow → Workers → Services → Storage
 - airflow-webserver: DAG起動
 - storage: タイル取得（配信用）
 
+**ポート**:
+- メイン: 8000
+- 管理画面: 8001
+- Airflow Workers 内部 API: 8002
+
 **エンドポイント**:
 
-##### 管理画面 API
-| メソッド | パス | 説明 | リクエスト | レスポンス (配列) |
-|---------|------|------|-----------|-----------|
-| POST | `/api/jobs` | ジョブ作成、Airflow DAG起動 | `{"game_id": string, "save_data_name": string}` | `{"job_id": integer, "status": string, "dag_run_id": string}` |
-| GET | `/api/jobs/status` | 全ジョブのステータス一覧取得 | - | `[{"job_id": integer, "status": string, "progress": float, ...}]` |
-
-##### Airflow Workers 専用内部 API
-このAPI群は、Airflow Workerから呼び出されることを想定した内部APIであり、データ永続化の責任をBackendに集約するための**推奨されるアーキテクチャパターン**です。
-
+##### メイン画面
 | メソッド | パス | 説明 |
 |---------|------|------|
-| POST | `/api/internal/screenshots` | スクリーンショットメタデータ保存 |
-| POST | `/api/internal/coordinates` | 座標情報保存 |
-| POST | `/api/internal/tiles` | タイルメタデータ保存 |
-| POST | `/api/internal/jobs/{job_id}/cleanup` | ジョブ完了後のクリーンアップ実行 |
+| GET | `/` | メイン画面HTML配信 |
+| GET | `/assets/*` | 静的ファイル配信 |
+
+##### 管理画面
+| メソッド | パス | 説明 |
+|---------|------|------|
+| GET | `/` | 管理画面HTML配信 |
+| GET | `/assets/*` | 静的ファイル配信 |
+
+##### 管理画面 API
+| メソッド | パス | 説明 | リクエスト | レスポンス |
+|---------|------|------|-----------|-----------|
+| POST | `/api/tiles/create` | タイル生成ジョブ作成、DAG起動 | `{"game_id": string, "save_data_name": string}` | `{"job_id": integer, "status": string, "dag_run_id": string}` |
+| GET | `/api/status` | 全ジョブのステータス一覧取得 | - | `[{"job_id": integer, "status": string, "progress": float, "total_tiles": integer, "created_tiles": integer, ...}]` |
+
+##### Airflow Workers 専用内部 API
+| メソッド | パス | 説明 | リクエスト | レスポンス |
+|---------|------|------|-----------|-----------|
+| POST | `/api/internal/screenshots` | スクリーンショットメタデータ保存 | `{"job_id": integer, "screenshot_id": string, "x": integer, "y": integer, "filepath": string}` | `{"success": boolean}` |
+| PUT | `/api/internal/screenshots/{screenshot_id}` | スクリーンショットの推定座標更新 | `{"estimated_x": integer, "estimated_y": integer}` | `{"success": boolean}` |
+| POST | `/api/internal/tiles` | タイルメタデータ保存 | `{"job_id": integer, "tiles": array}` | `{"success": boolean}` |
+| DELETE | `/api/internal/screenshots/{screenshot_id}` | スクリーンショット削除（ファイル＋DB） | - | `{"success": boolean}` |
 
 ##### タイル配信 API
 | メソッド | パス | 説明 |
 |---------|------|------|
 | GET | `/tiles/{z}/{x}/{y}.avif` | タイル画像配信（storage へプロキシ） |
-
-**ポート**: 4567
-
----
 
 ### 2.3 Airflow層
 
@@ -175,13 +171,11 @@ Browser → Backend → Airflow → Workers → Services → Storage
 - airflow: 読み書き
 
 **エンドポイント**:
-| メソッド | パス | 説明 | リクエスト | レスポンス |
-|---------|------|------|-----------|-----------|
-| POST | `/api/v1/dags/{dag_id}/dagRuns` | DAG実行トリガー | `{"conf": object}` | `{"dag_run_id": string, "state": string}` |
+| メソッド | パス | 説明 |
+|---------|------|------|
+| POST | `/api/v1/dags/{dag_id}/dagRuns` | DAG実行トリガー |
 
-**ポート**: 8080
-
----
+**ポート**: 8003
 
 #### airflow-scheduler
 **役割**: Airflow スケジューラー
@@ -191,15 +185,13 @@ Browser → Backend → Airflow → Workers → Services → Storage
 - タスクの依存関係管理
 - 実行可能なタスクの検出
 - Redis へのタスク投入
-- タスク完了の監視と次タスクのスケジューling
+- タスク完了の監視と次タスクのスケジューリング
 
 **DB接続**:
 - airflow: 読み書き
 
 **呼び出し先**:
 - redis: タスク投入（LPUSH）
-
----
 
 ### 2.4 Airflow Worker層
 
@@ -209,29 +201,26 @@ Browser → Backend → Airflow → Workers → Services → Storage
 **責務**:
 - `capture` キューからタスク取得
 - `service-capture` サービス呼び出し
-- 結果を airflow DB（XCom）に保存
-- **Backend API を通じて結果を gamedb に永続化**
+- Backend API を通じて結果を gamedb に永続化
 - タスク状態更新
 
 **DB接続**:
 - airflow: 読み書き（タスク状態、XCom）
 
 **呼び出し先**:
-- redis: タスク取得（BLPOP capture）
-- backend: 結果の永続化
+- redis: タスク取得
 - service-capture: スクリーンショット撮影依頼
+- backend: 結果の永続化
 
-**レプリカ数**: 3
+**レプリカ数**: 2
 
 **処理フロー**:
 1. Redis からタスク取得
 2. airflow DB でタスクを 'running' 状態に更新
-3. `service-capture` サービスを呼び出し
+3. `service-capture` を呼び出し
 4. レスポンスを airflow DB の XCom に保存
-5. **Backend の内部APIを呼び出し、スクリーンショットメタデータを永続化**
+5. Backend の `/api/internal/screenshots` を呼び出して結果を永続化
 6. airflow DB でタスクを 'success' 状態に更新
-
----
 
 #### airflow-worker-coords
 **役割**: 座標推定タスク実行ワーカー
@@ -240,17 +229,16 @@ Browser → Backend → Airflow → Workers → Services → Storage
 - `coords` キューからタスク取得
 - 前タスクの結果を XCom から取得
 - `service-coords` サービス呼び出し
-- 結果を airflow DB（XCom）に保存
-- **Backend API を通じて結果を gamedb に永続化**
+- Backend API を通じて結果を gamedb に永続化
 - タスク状態更新
 
 **DB接続**:
 - airflow: 読み書き（タスク状態、XCom）
 
 **呼び出し先**:
-- redis: タスク取得（BLPOP coords）
-- backend: 結果の永続化
+- redis: タスク取得
 - service-coords: 座標推定依頼
+- backend: 結果の永続化
 
 **レプリカ数**: 2
 
@@ -258,12 +246,10 @@ Browser → Backend → Airflow → Workers → Services → Storage
 1. Redis からタスク取得
 2. airflow DB でタスクを 'running' 状態に更新
 3. airflow DB の XCom から前タスク結果取得
-4. `service-coords` サービスを呼び出し
+4. `service-coords` を呼び出し
 5. レスポンスを airflow DB の XCom に保存
-6. **Backend の内部APIを呼び出し、座標情報を永続化**
+6. Backend の `/api/internal/screenshots/{id}` を呼び出して推定座標を更新
 7. airflow DB でタスクを 'success' 状態に更新
-
----
 
 #### airflow-worker-tiles
 **役割**: タイル切り出しタスク実行ワーカー
@@ -272,38 +258,52 @@ Browser → Backend → Airflow → Workers → Services → Storage
 - `tiles` キューからタスク取得
 - 前タスクの結果を XCom から取得
 - `service-tiles` サービス呼び出し
-- 結果を airflow DB（XCom）に保存
-- **Backend API を通じて結果を gamedb に永続化**
+- Backend API を通じて結果を gamedb に永続化
 - タスク状態更新
-- （`default`キューで）ジョブ完了後のクリーンアップタスクを実行
 
 **DB接続**:
 - airflow: 読み書き（タスク状態、XCom）
 
 **呼び出し先**:
-- redis: タスク取得（BLPOP tiles, BLPOP default）
-- backend: 結果の永続化、クリーンアップ指示
+- redis: タスク取得
 - service-tiles: タイル切り出し依頼
-- storage: スクリーンショット削除（DELETE）
+- backend: 結果の永続化
 
 **レプリカ数**: 2
 
-**処理フロー（タイル切り出し）**:
+**処理フロー**:
 1. Redis からタスク取得
 2. airflow DB でタスクを 'running' 状態に更新
 3. airflow DB の XCom から複数の前タスク結果取得
-4. `service-tiles` サービスを呼び出し
+4. `service-tiles` を呼び出し
 5. レスポンスを airflow DB の XCom に保存
-6. **Backend の内部APIを呼び出し、タイル情報とスクリーンショット使用状況を永続化**
+6. Backend の `/api/internal/tiles` を呼び出してタイル情報を永続化
 7. airflow DB でタスクを 'success' 状態に更新
 
-**処理フロー（クリーンアップ）**:
-1. DAGの最終タスクとしてトリガーされる
-2. BackendのクリーンアップAPIを呼び出し、ジョブIDを渡す
-3. Backendは対象ジョブの一時スクリーンショットファイルと関連DBレコードを削除する
-4. airflow DB でタスクを 'success' 状態に更新
+#### airflow-worker-cleanup
+**役割**: スクリーンショット削除タスク実行ワーカー
 
----
+**責務**:
+- `cleanup` キューからタスク取得
+- スクリーンショットがもう使用されないことを確認
+- Backend API を通じてスクリーンショットを削除（ファイル + DBレコード）
+- タスク状態更新
+
+**DB接続**:
+- airflow: 読み書き（タスク状態、XCom）
+
+**呼び出し先**:
+- redis: タスク取得
+- backend: スクリーンショット削除指示
+
+**レプリカ数**: 2
+
+**処理フロー**:
+1. Redis からタスク取得
+2. airflow DB でタスクを 'running' 状態に更新
+3. XCom から対象スクリーンショットID取得
+4. Backend の `/api/internal/screenshots/{id}` DELETE を呼び出し
+5. airflow DB でタスクを 'success' 状態に更新
 
 ### 2.5 処理サービス層
 
@@ -311,10 +311,10 @@ Browser → Backend → Airflow → Workers → Services → Storage
 **役割**: スクリーンショット撮影サービス（Python + Flask）
 
 **責務**:
-- ゲームプロセス起動（仮想ディスプレイ上）
+- ゲームプロセス起動
 - 指定セーブデータと座標でスクリーンショット撮影
 - storage へ画像保存
-- 結果返却（画像パス）
+- 画像パスを返却
 
 **DB接続**: なし
 
@@ -326,19 +326,17 @@ Browser → Backend → Airflow → Workers → Services → Storage
 |---------|------|------|-----------|-----------|
 | POST | `/capture` | スクリーンショット撮影 | `{"save_data_name": string, "x": integer, "y": integer}` | `{"image_path": string}` |
 
-**レプリカ数**: 3
+**レプリカ数**: 2
 
 **処理フロー**:
 1. リクエスト受信
-2. ゲームプロセス起動、指定セーブデータ読み込み
-3. 指定座標へ移動しスクリーンショット撮影
-4. 一意なファイル名を生成し、storage へ PUT リクエスト
-5. ゲームプロセス終了、メモリ解放
-6. レスポンス（画像パス）を返却
+2. ゲームプロセス起動、セーブデータ読み込み
+3. 座標へ移動してスクリーンショット撮影
+4. ファイル名を生成して storage へ PUT
+5. ゲーム終了、メモリ解放
+6. 画像パスを返却
 
-**注意事項**: DB接続や他サービス呼び出しは行わず、撮影処理のみに責務を限定。
-
----
+**ポート**: 5000
 
 #### service-coords
 **役割**: 座標推定サービス（Python + Flask + OpenCV）
@@ -346,7 +344,7 @@ Browser → Backend → Airflow → Workers → Services → Storage
 **責務**:
 - storage から画像取得
 - 画像解析による座標推定
-- 結果返却（推定座標）
+- 推定座標を返却
 
 **DB接続**: なし
 
@@ -362,14 +360,12 @@ Browser → Backend → Airflow → Workers → Services → Storage
 
 **処理フロー**:
 1. リクエスト受信
-2. `image_path` と `adjacent_images` の画像を storage から取得
-3. `hint_x`, `hint_y` をヒントに座標推定処理を実行
+2. storage から主画像と隣接画像を取得
+3. ヒント座標を用いて座標推定処理実行
 4. メモリ解放
-5. レスポンス（推定座標）を返却
+5. 推定座標を返却
 
-**注意事項**: DB接続や他サービス呼び出しは行わず、座標推定処理のみに責務を限定。
-
----
+**ポート**: 5001
 
 #### service-tiles
 **役割**: タイル切り出しサービス（Python + Flask + Pillow）
@@ -377,10 +373,10 @@ Browser → Backend → Airflow → Workers → Services → Storage
 **責務**:
 - storage から複数の画像取得
 - 座標情報を元に画像を結合
-- 指定範囲を切り出し、タイル画像を1枚生成
+- 指定範囲を切り出し
 - AVIF形式 (quality 30) で圧縮
 - storage へタイル保存
-- 結果返却（タイルパス）
+- タイルパスを返却
 
 **DB接続**: なし
 
@@ -396,77 +392,253 @@ Browser → Backend → Airflow → Workers → Services → Storage
 
 **処理フロー**:
 1. リクエスト受信
-2. リクエスト内の複数画像を storage から取得
-3. 仮想キャンバス上に画像を配置
-4. 指定されたタイル座標とサイズに基づき領域を切り出し
-5. 画像を AVIF (quality 30) 形式に圧縮
-6. storage へタイルを保存
+2. 複数画像を storage から取得
+3. 仮想キャンバスに配置
+4. タイル範囲を切り出し
+5. AVIF (quality 30) に圧縮
+6. storage に保存
 7. メモリ解放
-8. レスポンス（生成されたタイルパス）を返却
+8. タイルパスを返却
 
-**注意事項**: DB接続や他サービス呼び出しは行わず、タイル切り出し処理のみに責務を限定。
-
----
+**ポート**: 5002
 
 ## 3. UseCase 1: マップタイル生成フロー
 
 ### 3.1 全体フロー概要
 
 ```
-1. 管理画面でジョブ作成ボタンを押下
-   ↓
+1. 管理画面で「タイル生成」ボタンを押下
 2. Backend が job を作成し、Airflow DAG を起動
-   ↓
 3. Airflow Scheduler がタスクを生成・スケジューリング
-   ↓
 4. スクリーンショット撮影タスク（並列実行）
-   ↓
 5. 座標推定タスク（並列実行）
-   ↓
 6. タイル切り出しタスク（並列実行）
-   ↓
-7. 全タイル生成完了後、スクリーンショットを一括削除
-   ↓
+7. スクリーンショット削除タスク（各スクショの使用完了後、個別に実行）
 8. 完了、管理画面でステータスを確認
 ```
 
----
-
 ### 3.2 詳細フロー
 
-#### Step 1: ジョブ作成とDAG起動
+**Step 1: タイル生成ジョブ作成**
 
-ユーザーがブラウザの管理画面からゲームIDとセーブデータ名を指定してジョブ作成をリクエストします。
-Backendはリクエストを受け、gamedbに新しいジョブレコードを作成します。その後、撮影対象エリアのリストやタイル依存関係を計算し、それらをパラメータとしてAirflow REST APIを呼び出し、`map_processing` DAGを起動します。
-BackendはクライアントにジョブIDと"running"ステータスを返します。ブラウザは定期的にステータスAPI (`/api/jobs/status`) をポーリングして進捗を確認します。
+ユーザーは管理画面からゲームID（例: "city01"）とセーブデータ名（例: "save_001"）を指定して「タイル生成」ボタンを押下します。Backendは`POST /api/tiles/create`リクエストを受け取ります。
 
-#### Step 2: タスクスケジューリング
+Backendは以下を実行します:
+- gamedbに新しいジョブレコードを作成（status='preparing'）
+- 撮影対象エリアのリストを計算
+- AirflowのDAG起動APIを呼び出し、`map_processing` DAGを起動
+- 起動されたdag_run_idを取得してdb に保存
+- ジョブステータスを'running'に更新
 
-Airflow Schedulerは起動されたDAGを検知し、パラメータに基づいて動的にタスク（撮影、座標推定、タイル生成、クリーンアップ）を生成します。タスク間の依存関係を設定し、実行可能な最初のタスク群（スクリーンショット撮影タスク）をRedisのキューに投入します。
+Backendはクライアントに`{"job_id": 123, "status": "running", "dag_run_id": "run_123"}`を返します。
 
-#### Step 3: スクリーンショット撮影
+ブラウザは`/api/status`を3秒ごとにポーリング開始します。
 
-`airflow-worker-capture` が `capture` キューからタスクを取得します。Workerはタスクパラメータ（撮影座標、セーブデータ名など）を元に `service-capture` を呼び出します。`service-capture` はゲームを起動してスクリーンショットを撮影し、Storageに保存後、画像パスを返します。Workerは受け取った画像パスをBackendの内部APIに送り、メタデータをgamedbに永続化させます。
+**Step 2: タスク生成とスケジューリング**
 
-#### Step 4: 座標推定
+Airflow Schedulerはdag_runを検知し、DAG定義ファイルを読み込みます。パラメータから撮影エリア数（例: 10,000）とタイル依存関係（各タイルが依存するスクリーンショットのエリアID）を取得し、以下のタスクを動的に生成します:
 
-スクリーンショット撮影タスクが完了すると、依存する座標推定タスクが実行可能になります。`airflow-worker-coords` は `coords` キューからタスクを取得し、前タスクのXComから画像パスなどの情報を取得します。また、期待される座標をヒント座標として `service-coords` を呼び出します。`service-coords` は画像を解析し、より正確な推定座標を返します。Workerはこの結果をBackendの内部API経由でgamedbに永続化させます。
+- capture_0, capture_1, ..., capture_9999（スクリーンショット撮影）
+- coords_0, coords_1, ..., coords_9999（座標推定）
+- tile_1_10_20, tile_1_10_21, ...（タイル切り出し、数十万個）
+- cleanup_0, cleanup_1, ..., cleanup_9999（スクリーンショット削除）
 
-#### Step 5: タイル切り出し
+タスク間の依存関係を設定します:
+```
+capture_0 >> coords_0
+coords_0 >> tile_1_10_20
+coords_1 >> tile_1_10_20
+... (タイルに必要なすべてのcoords完了まで)
+tile_1_10_20 >> cleanup_0 (cleanup_0が使用するすべてのタイル完了)
+tile_1_10_21 >> cleanup_0
+... (タイル0に関連するすべてのタイル完了)
+```
 
-あるタイルを生成するのに必要な全てのスクリーンショットの座標推定が完了すると、タイル切り出しタスクが実行可能になります。`airflow-worker-tiles` は `tiles` キューからタスクを取得し、依存する複数のスクリーンショット情報（画像パス、推定座標）をXComから集約します。
-Workerはこれらの情報を `service-tiles` に渡してタイル生成を依頼します。`service-tiles` は複数の画像を合成し、指定された範囲を切り出して1枚のタイル画像を生成します。画像はAVIF形式（quality 30）に圧縮され、Storageに保存されます。Workerは生成されたタイルパスを受け取り、Backendの内部API経由でgamedbに永続化させます。
+Schedulerは実行可能なタスク（capture_*）をRedisの`capture`キューに投入します。
 
-#### Step 6: スクリーンショットの一括削除
+**Step 3: スクリーンショット撮影**
 
-DAG内の全てのタイル生成タスクが完了した後、最終タスクとしてクリーンアップタスクがトリガーされます。このタスクは、ジョブで使用されたすべての一時スクリーンショットファイルと、それに関連するDB上のメタデータ（screenshots, coordinatesテーブルなど）を削除する責務を持ちます。WorkerはBackendのクリーンアップAPIを呼び出すことで、この処理を実行します。これにより、ストレージ容量とDBをクリーンな状態に保ちます。
+`airflow-worker-capture`は`capture`キューからタスク（例: "capture_0"）を取得します。
 
-#### Step 7: 完了とステータス確認
+Worker は以下を実行します:
+- airflow DBでタスクを'running'に更新
+- ジョブの設定パラメータからエリアID 0の座標を取得（例: x=0, y=0）
+- `service-capture`を呼び出し: `POST http://service-capture:5000/capture`
+  ```json
+  {
+    "save_data_name": "save_001",
+    "x": 0,
+    "y": 0
+  }
+  ```
 
-ブラウザは定期的に `GET /api/jobs/status` をポーリングしています。Backendはこのリクエストに対し、gamedbとairflow DBから情報を集約し、全ジョブの最新ステータス（進捗率、完了タスク数など）を配列で返します。
-Airflow DAGの実行が完了すると、Backendは該当ジョブのステータスを "completed" に更新します。ブラウザはこれ検知してポーリングを停止し、ユーザーに完了を通知します。
+`service-capture`は以下を実行します:
+- ゲームプロセスを起動（仮想ディスプレイ）
+- セーブデータ"save_001"をロード
+- 座標(0, 0)へゲーム内で移動
+- スクリーンショット撮影
+- screenshot_idを生成（例: "shot_abc123"）
+- storageへ`PUT /images/screenshots/shot_abc123.png`でファイル保存
+- `{"image_path": "/images/screenshots/shot_abc123.png"}`を返却
+- ゲーム終了、メモリ解放
 
----
+Worker は以下を実行します:
+- レスポンスを受け取り、airflow DBの XComに保存
+- Backend の`POST /api/internal/screenshots`を呼び出し:
+  ```json
+  {
+    "job_id": 123,
+    "screenshot_id": "shot_abc123",
+    "x": 0,
+    "y": 0,
+    "filepath": "/images/screenshots/shot_abc123.png"
+  }
+  ```
+- Backendは`screenshots`テーブルにレコード挿入
+- airflow DBでタスクを'success'に更新
+
+**Step 4: 座標推定**
+
+capture_0タスクが完了するとcoords_0が実行可能になります。
+
+`airflow-worker-coords`は`coords`キューからタスク（"coords_0"）を取得します。
+
+Worker は以下を実行します:
+- airflow DBでタスクを'running'に更新
+- XComからcapture_0の結果を取得（`{"image_path": "/images/screenshots/shot_abc123.png"}`）
+- DAGの設定から期待座標（ヒント）を取得（例: hint_x=1024, hint_y=2048）
+- `service-coords`を呼び出し: `POST http://service-coords:5001/estimate`
+  ```json
+  {
+    "image_path": "/images/screenshots/shot_abc123.png",
+    "adjacent_images": ["/images/screenshots/shot_def456.png", ...],
+    "hint_x": 1024,
+    "hint_y": 2048
+  }
+  ```
+
+`service-coords`は以下を実行します:
+- storageから主画像と隣接画像を取得
+- 画像解析（テンプレートマッチング、特徴点検出）を実行
+- ヒント座標をも考慮した座標推定
+- `{"estimated_x": 1024, "estimated_y": 2048}`を返却
+
+Worker は以下を実行します:
+- レスポンスを受け取り、airflow DBの XComに保存
+- Backend の`PUT /api/internal/screenshots/shot_abc123`を呼び出し:
+  ```json
+  {
+    "estimated_x": 1024,
+    "estimated_y": 2048
+  }
+  ```
+- Backendは`screenshots`テーブルの該当レコードに推定座標を更新
+- airflow DBでタスクを'success'に更新
+
+**Step 5: タイル切り出し**
+
+あるタイル（例: tile_1_10_20）に必要なすべてのcoords完了（coords_0, coords_1, coords_128, coords_129）後、tile_1_10_20が実行可能になります。
+
+`airflow-worker-tiles`は`tiles`キューからタスク（"tile_1_10_20"）を取得します。
+
+Worker は以下を実行します:
+- airflow DBでタスクを'running'に更新
+- DAGの設定からこのタイルが必要とするエリアID（area_id: 0, 1, 128, 129）を取得
+- XComから各エリアのcapture・coords結果を取得し、以下のようなimagesリストを構築:
+  ```json
+  [
+    {
+      "id": "shot_abc123",
+      "path": "/images/screenshots/shot_abc123.png",
+      "x": 1024,
+      "y": 2048
+    },
+    ...
+  ]
+  ```
+- `service-tiles`を呼び出し: `POST http://service-tiles:5002/cut`
+  ```json
+  {
+    "images": [...],
+    "tile_x": 10,
+    "tile_y": 20,
+    "tile_size": 512
+  }
+  ```
+
+`service-tiles`は以下を実行します:
+- storageから複数の画像を取得
+- 仮想キャンバス上に座標に基づいて配置
+- タイル範囲(x:10, y:20, size:512)を切り出し
+- AVIF (quality 30)に圧縮
+- storageへ`PUT /images/tiles/1/10/20.avif`で保存
+- `{"tile_path": "/images/tiles/1/10/20.avif"}`を返却
+
+Worker は以下を実行します:
+- レスポンスを受け取り、airflow DBの XComに保存
+- Backend の`POST /api/internal/tiles`を呼び出し:
+  ```json
+  {
+    "job_id": 123,
+    "tiles": [
+      {
+        "z": 1,
+        "x": 10,
+        "y": 20,
+        "filepath": "/images/tiles/1/10/20.avif"
+      }
+    ]
+  }
+  ```
+- Backendは`tiles`テーブルにレコード挿入
+- airflow DBでタスクを'success'に更新
+
+**Step 6: スクリーンショット削除**
+
+DAG設計では、各スクリーンショットを利用するすべてのタイル生成タスクが完了したとき、対応する削除タスク（cleanup_0）が実行可能になります。
+
+例えば、スクリーンショットID "shot_abc123" が tiles_1_10_20 と tiles_1_10_21 の両方で使用される場合、両タイルが完了するまで cleanup_0 は待機します。
+
+`airflow-worker-cleanup`は`cleanup`キューからタスク（"cleanup_0"）を取得します。
+
+Worker は以下を実行します:
+- airflow DBでタスクを'running'に更新
+- XComから対象スクリーンショットID（例: "shot_abc123"）を取得
+- Backend の`DELETE /api/internal/screenshots/shot_abc123`を呼び出し
+
+Backend は以下を実行します:
+- storageから`DELETE /images/screenshots/shot_abc123.png`でファイル削除
+- gamedbの`screenshots`テーブルから該当レコード削除
+
+Worker は以下を実行します:
+- airflow DBでタスクを'success'に更新
+
+この方式により、すべての必要なタイル生成が完了するまでスクリーンショットが削除されることはなく、また不要になると速やかに削除されます。
+
+**Step 7: 完了とステータス確認**
+
+Airflow DAGの全タスクが完了すると、dag_runはsuccess状態になります。
+
+ブラウザはポーリングで定期的に`GET /api/status`を呼び出します。
+
+Backend は以下を実行します:
+- gamedbから全ジョブの情報を取得
+- airflow DBからステータスを確認
+- 各ジョブについて、生成されたタイル数を計算
+- 全ジョブの情報を配列で返却:
+  ```json
+  [
+    {
+      "job_id": 123,
+      "status": "completed",
+      "progress": 100.0,
+      "total_tiles": 100000,
+      "created_tiles": 100000
+    }
+  ]
+  ```
+
+ブラウザはstatus='completed'を検知してポーリング停止、完了メッセージを表示します。
 
 ## 4. UseCase 2: Webブラウザでマップ閲覧
 
@@ -474,145 +646,108 @@ Airflow DAGの実行が完了すると、Backendは該当ジョブのステー�
 
 ```
 1. ブラウザで MapLibre GL JS を初期化
-   ↓
 2. 表示範囲から必要なタイルを計算
-   ↓
 3. Backend へタイルリクエスト（並列）
-   ↓
 4. Backend が Storage へプロキシ
-   ↓
 5. ブラウザでタイル描画、マップ表示完了
 ```
-
----
 
 ### 4.2 詳細フロー
 
 **Browser**
-ユーザーがマップ閲覧ページを開くと、クライアントサイドのJavaScriptが `MapLibre GL JS` ライブラリを初期化します。タイルレイヤーとして、Backendが提供するタイル配信APIのエンドポイント (`/tiles/{z}/{x}/{y}.avif`) を指定します。
 
-MapLibre GL JSは、現在のマップの表示範囲（緯度経度）とズームレベルに基づき、描画に必要なタイルURLを自動的に計算し、Backendに対して複数のHTTP GETリクエストを並列で送信します。
+ユーザーがマップ閲覧ページ（`/view`）を開きます。Backendは`view.html`を返却します。
+
+ブラウザ上で`MapLibre GL JS`が初期化されます。タイルレイヤーとして以下を指定します:
+```javascript
+L.tileLayer('http://backend:4567/tiles/{z}/{x}/{y}.avif', {
+  maxZoom: 18,
+  attribution: 'Game Map'
+}).addTo(map);
+```
+
+ユーザーがマップを操作（表示、パン、ズーム）すると、MapLibreは現在の表示範囲に必要なタイルを計算します。例えば、ズームレベル z=1, 表示範囲 x=10-15, y=20-25 の場合、36枚のタイルが必要です。
+
+ブラウザは並列（通常6-8並列）で以下のようなリクエストを送信します:
+```
+GET http://backend:4567/tiles/1/10/20.avif
+GET http://backend:4567/tiles/1/10/21.avif
+... (計36リクエスト)
+```
 
 **Backend**
-Backendは、`/tiles/{z}/{x}/{y}.avif` へのリクエストを受け取ると、内部でリクエストをStorageサーバーにプロキシします。Storageサーバーは該当パスのタイル画像ファイル（AVIF形式）を読み込み、Backendに返します。
 
-BackendはStorageから受け取った画像データをそのままクライアント（ブラウザ）に返します。
+各タイルリクエストに対し、Backend は以下を実行します:
+- リクエストを受け取る（`GET /tiles/1/10/20.avif`）
+- storageに プロキシリクエスト: `GET http://storage:80/images/tiles/1/10/20.avif`
+- storageからタイル画像バイナリを受け取る
+- ブラウザに返却:
+  ```
+  HTTP/1.1 200 OK
+  Content-Type: image/avif
+  Content-Length: 45678
+  
+  [バイナリデータ]
+  ```
 
 **Browser**
-ブラウザはタイル画像を次々と受信し、マップ上の正しい位置に描画していきます。すべてのタイルが揃うと、マップ表示が完了します。ユーザーがマップをパン（移動）したりズームしたりすると、MapLibre GL JSは新たに見えるようになった領域のタイルを再度リクエストし、シームレスな地図体験を提供します。
 
----
+ブラウザはタイル画像を次々と受信し、キャッシュに保存します。各タイルは Canvas に描画されます。
 
-## 5. データフロー図
+全36枚のタイル受信により、マップ表示が完了します。
 
-### 5.1 依存関係（一方向）
+ユーザーがパン・ズームすると、新たに見える領域のタイルが自動的にリクエストされます。キャッシュに存在するタイルは即座に表示されます。
 
-```
-Browser
-  ↓ HTTP Request
-Backend
-  ↓ Airflow REST API / Internal API Call
-Airflow Webserver / Airflow Workers
-  ↓ (Scheduler -> Redis -> Worker)
-Airflow Scheduler
-  ↓ Redis Publish
-Redis
-  ↓ Message Queue
-Airflow Workers
-  ↓ HTTP Request
-Services (service-capture/service-coords/service-tiles)
-  ↓ HTTP Request
-Storage
-```
+## 5. スケーリングとパフォーマンス
 
-### 5.2 データ永続化の責任
+### 5.1 並列度の設定
 
-| データ | 永続化担当 | DB | テーブル（例） |
-|--------|-----------|-----|----------|
-| Job 情報 | Backend | gamedb | jobs |
-| タイル依存関係 | Backend | gamedb | tile_dependencies |
-| DAG Run | Airflow Webserver | airflow | dag_run |
-| Task Instance | Airflow Scheduler | airflow | task_instance |
-| スクリーンショット | Backend (Worker経由) | gamedb | screenshots |
-| 座標情報 | Backend (Worker経由) | gamedb | coordinates |
-| タイル情報 | Backend (Worker経由) | gamedb | tiles |
-| XCom（タスク間データ） | 各 Airflow Worker | airflow | xcom |
+システム全体の並列度は以下のとおりです。すべてのコンポーネントを統一した並列度（レプリカ数）で配置します。
 
-### 5.3 ファイル操作の責任
+| コンポーネント | レプリカ数 | キュー/役割 |
+|---|---|---|
+| airflow-worker-capture | 2 | capture キュー処理 |
+| airflow-worker-coords | 2 | coords キュー処理 |
+| airflow-worker-tiles | 2 | tiles キュー処理 |
+| airflow-worker-cleanup | 2 | cleanup キュー処理 |
+| service-capture | 2 | スクリーンショット撮影 |
+| service-coords | 2 | 座標推定 |
+| service-tiles | 2 | タイル切り出し |
 
-| ファイル | 操作 | 担当コンテナ | storage API |
-|---------|------|-------------|-------------|
-| スクリーンショット | 保存 | service-capture | PUT |
-| スクリーンショット | 取得 | service-coords, service-tiles | GET |
-| スクリーンショット | 削除 | airflow-worker-tiles (Backend経由) | DELETE |
-| タイル | 保存 | service-tiles | PUT |
-| タイル | 配信 | backend（nginx経由） | GET |
+### 5.2 ボトルネック対策
 
----
+**スクリーンショット撮影**
+- ゲーム起動に時間がかかるため、撮影スループットがボトルネック。
+- 対策: `service-capture` と `airflow-worker-capture` のレプリカ数を確保し、並列度を維持。
+
+**Storage I/O**
+- 大量の読み書きによるディスクI/O がボトルネック。
+- 対策: SSDを使用、ストレージネットワークの帯域確保。
+
+**タイル配信**
+- CDN導入を検討。複数のBackendインスタンスで負荷分散。
 
 ## 6. 重要な設計原則
 
-### 6.1 依存関係の一方向性
+### 6.1 責務の明確化
 
-**絶対に守るべきルール**:
-- 下位層から上位層への呼び出しは一切行いません。
-- Services (service-capture/coords/tiles) は Backend を呼び出しません。
-- データ永続化は、Airflow WorkersからBackendの内部APIを呼び出すことで行います。
+**Backend**
+- ビジネスロジック、gamedb管理、Airflow制御、API提供、HTML配信。
 
-**避けるべき設計**:
-```
-❌ service-tiles → backend API → gamedb (責務違反、循環依存のリスク)
-❌ airflow-worker-capture → gamedb (直接書き込み、責務違反)
-```
+**Airflow**
+- DAG定義、タスク生成、依存関係管理、スケジューリング。
 
-**推奨される設計**:
-```
-✅ airflow-worker-capture → service-capture → storage
-✅ airflow-worker-capture → backend (内部API) → gamedb
-```
+**Airflow Workers**
+- タスク実行、Service呼び出し、Backend APIとの連携。
 
-### 6.2 責務の明確化
+**Services（service-capture/coords/tiles）**
+- 単一の専門処理のみを実行。ステートレス。他サービスやBackendの知識を持たない。
 
-**各層の責務**:
-- **Services**: 専門処理のみ。ステートレスであり、DB接続や他サービス呼び出しは行いません。
-- **Workers**: タスクの実行とオーケストレーション。Servicesを呼び出し、その結果をBackend API経由で永続化します。
-- **Airflow**: ワークフロー全体の管理と依存関係制御。
-- **Backend**: ビジネスロジック、API提供、データ永続化の一元管理。
+**Storage**
+- ファイルのCRUD操作のみ。HTTPインターフェース。
 
-### 6.3 データ永続化のタイミング
+### 6.2 変更耐性
 
-**原則**:
-- Airflow WorkersがServicesから処理結果を受け取った後、Backendの内部APIを呼び出して即座にDBへ永続化します。
-- Servicesは結果を返すのみで、永続化には関与しません。
-- このパターンにより、データ永続化のロジックがBackendに集約され、システム全体の整合性と保守性が向上します。
-
----
-
-## 7. スケーリングとパフォーマンス
-
-### 7.1 並列度の設定
-
-| コンテナ | レプリカ数 | キュー | 並列処理数 |
-|------------------|-----------|--------|-----------|
-| airflow-worker-capture | 3 | capture | 3 |
-| airflow-worker-coords | 2 | coords | 2 |
-| airflow-worker-tiles | 2 | tiles | 2 |
-| service-capture | 3 | - | 3 |
-| service-coords | 2 | - | 2 |
-| service-tiles | 2 | - | 2 |
-
-### 7.2 ボトルネック対策
-
-**想定されるボトルネック**:
-1. スクリーンショット撮影（ゲーム起動に時間がかかる）
-   - **対策**: `service-capture` と `airflow-worker-capture` のレプリカ数を他のコンポーネントより多く配置し、並列度を高めます。
-
-2. Storage I/O
-   - **対策**: 高速なストレージ（SSDなど）を使用します。一時ファイル（スクリーンショット）は処理完了後に速やかに削除し、ストレージ使用量を抑制します。
-
-3. タイル配信
-   - **対策**: CDNの導入を検討します。また、BackendとStorage間のネットワーク帯域を確保します。
-
----
-
-この設計書に従うことで、依存関係が一方向で、責務が明确に分離された、保守性と拡張性の高いシステムを構築できます。
+- Service の処理ロジック変更は、Backend や Airflow に影響しない。
+- Airflow DAGの構造変更は Service に影響しない。
+- Backend の API設計により、データ永続化の詳細が Workers に漏えいしない。
