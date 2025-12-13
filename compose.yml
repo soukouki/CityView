@@ -1,0 +1,63 @@
+
+services:
+
+  app:
+    build:
+      context: app
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - 5190:80 # メインサイト
+      - 5191:81 # 管理用サイト
+
+  screenshot:
+    build:
+      context: screenshot
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - 5290:80
+
+  # 以下コピー元
+
+  # # 通常の実行環境
+  # # GUIを動かすために必要なライブラリが全て入っている
+  # # ただし、GUIに接続することはできない
+  # server-general:
+  #   build:
+  #     context: server
+  #     dockerfile: Dockerfile.general
+  #   restart: unless-stopped
+  #   ports:
+  #     - "13353:13353"
+  #   volumes:
+  #     - ./volume-bin:/app/bin
+  #     - ./volume-save:/root/simutrans
+  #   command:
+  #     /app/bin/simutrans-extended
+  #       -objects Pak128.Britain-Ex
+  #       -server 13353
+  #       -debug 2
+  #       -server_admin_pw ${NETTOOL_PASSWORD}
+
+  # # vncでGUIに接続できる実行環境
+  # # プロセス終了時に自動で復帰する機構付き
+  # server-vnc:
+  #   build:
+  #     context: server
+  #     dockerfile: Dockerfile.vnc
+  #   restart: unless-stopped
+  #   ports:
+  #     - "13353:13353"   # simutrans-extendedのポート
+  #     - "5900:5900"     # VNCのポート
+  #   volumes:
+  #     - ./volume-bin:/app/bin
+  #     - ./volume-save:/root/simutrans
+  #   environment:
+  #     - COMMAND=/app/bin/simutrans-extended
+  #       -objects Pak128.Britain-Ex
+  #       -server 13353
+  #       -fullscreen
+  #       -debug 2
+  #       -server_admin_pw ${NETTOOL_PASSWORD}
+  #   command: /app/start-vnc.sh
