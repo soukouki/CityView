@@ -28,6 +28,8 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # 事前に以下のディレクトリを作成しておくこと(nginxユーザーが読み書き可能であること)
+  # - ./volume-storage/images
   storage:
     image: nginx:alpine
     volumes:
@@ -137,11 +139,14 @@ services:
     environment:
       STORAGE_URL: http://storage
       GAME_EXECUTABLE: simutrans-extended
+      PAKSET_NAME: Pak128.Britain-Ex
+      PAKSET_SIZE: 128
     volumes:
-      - ./volume-game-data:/app/game-data
       - ./volume-storage:/data
       - ./volume-bin:/app/bin
       - ./volume-save:/root/simutrans
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
     deploy:
       replicas: 2
     restart: unless-stopped
