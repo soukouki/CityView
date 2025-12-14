@@ -48,8 +48,8 @@ module ServiceCapture
     )
 
     X11_CONTROLLER = ServiceCapture::X11Controller.new(
-      screen_width: ENV.fetch("CAPTURE_SCREEN_WIDTH", "4352").to_i,
-      screen_height: ENV.fetch("CAPTURE_SCREEN_HEIGHT", "2048").to_i,
+      screen_width: ENV.fetch("CAPTURE_SCREEN_WIDTH").to_i,
+      screen_height: ENV.fetch("CAPTURE_SCREEN_HEIGHT").to_i,
     )
 
     GAME_MANAGER = ServiceCapture::GameProcessManager.new(
@@ -57,10 +57,10 @@ module ServiceCapture
       # Host expects binaries mounted at /app/bin by compose
       executable_dir: ENV.fetch("GAME_EXECUTABLE_DIR", "/app/bin"),
       pakset_name: ENV.fetch("PAKSET_NAME"),
-      pakset_size: ENV.fetch("PAKSET_SIZE", "64").to_i,
+      pakset_size: ENV.fetch("PAKSET_SIZE").to_i,
       display: ENV.fetch("DISPLAY", ":99"),
-      screen_width: ENV.fetch("CAPTURE_SCREEN_WIDTH", "4352").to_i,
-      screen_height: ENV.fetch("CAPTURE_SCREEN_HEIGHT", "2048").to_i,
+      screen_width: ENV.fetch("CAPTURE_SCREEN_WIDTH").to_i,
+      screen_height: ENV.fetch("CAPTURE_SCREEN_HEIGHT").to_i,
       ttl_seconds: ENV.fetch("CAPTURE_TTL_SECONDS", "600").to_i,
       boot_timeout_seconds: ENV.fetch("GAME_BOOT_TIMEOUT_SECONDS", "180").to_i,
       boot_poll_interval_seconds: ENV.fetch("GAME_BOOT_POLL_INTERVAL_SECONDS", "2").to_i,
@@ -71,8 +71,8 @@ module ServiceCapture
 
     SCREENSHOT = ServiceCapture::ScreenshotService.new(
       storage_client: STORAGE,
-      crop_width: ENV.fetch("CAPTURE_CROP_WIDTH", "3840").to_i,
-      crop_height: ENV.fetch("CAPTURE_CROP_HEIGHT", "1920").to_i,
+      crop_width: ENV.fetch("CAPTURE_CROP_WIDTH").to_i,
+      crop_height: ENV.fetch("CAPTURE_CROP_HEIGHT").to_i,
       crop_offset_x: ENV.fetch("CAPTURE_CROP_OFFSET_X", "256").to_i,
       crop_offset_y: ENV.fetch("CAPTURE_CROP_OFFSET_Y", "64").to_i,
       x11_controller: X11_CONTROLLER,

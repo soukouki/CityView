@@ -35,6 +35,8 @@ module ServiceCapture
 
       # Move, hide cursor, wait a little for redraw, then screenshot.
       puts "Taking a screenshot at x=#{x}, y=#{y}"
+      puts "mousemove_to_center()"
+      @x11_controller.mousemove_to_center
       puts "move_to_coordinate(#{x}, #{y})"
       @x11_controller.move_to_coordinate(x, y)
       puts "hide_cursor()"

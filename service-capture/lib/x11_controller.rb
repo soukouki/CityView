@@ -21,26 +21,26 @@ module ServiceCapture
       ServiceCapture::CommandRunner.run!(["xdotool", "mousemove", x.to_i.to_s, y.to_i.to_s])
     end
 
+    def mousemove_to_center
+      mousemove(@screen_width / 2, @screen_height / 2)
+    end
+
     def move_to_coordinate(x, y)
       # Assumption: Shift+J opens jump dialog; then we can type "x,y" and Enter.
       # If dialog uses tab-separated fields, comma still often works; adjust if needed.
       key("shift+j")
-      sleep 0.05
+      sleep 0.02
       type("#{x},#{y}")
-      sleep 0.05
+      sleep 0.02
       key("Return")
-      sleep 0.05
+      sleep 0.02
       key("BackSpace")
     end
 
     def hide_cursor(map_x:, map_y:)
       # Move cursor to top-left margin to avoid appearing in crop (crop offset y=64, x=256)
-      # Move down-right position if now x/y is top-left otherwise move top-left
-      if map_x <= 15 || map_y <= 15
-        mousemove(@screen_width - 5, @screen_height - 120)
-      else
-        mousemove(5, 120)
-      end
+      # Move down-right position if now x/y is top-left otherwise move top-left => やっぱ動かないのでやめてみる
+      mousemove(10, 120)
     end
 
     def screenshot_full(output_path)
@@ -61,8 +61,8 @@ module ServiceCapture
     def zoom_in
       # 画面の中央にマウスを移動してPage_Up(3回)
       mousemove(@screen_width / 2, @screen_height / 2)
-      sleep 0.05
-      3.times { key("Page_Up"); sleep 0.05 }
+      sleep 0.02
+      3.times { key("Page_Up"); sleep 0.02 }
     end
   end
 end
