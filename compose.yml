@@ -1,5 +1,4 @@
 services:
-
   # --- Infrastructure Layer ---
   db:
     image: postgres:15-alpine
@@ -28,8 +27,6 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # 事前に以下のディレクトリを作成しておくこと(nginxユーザーが読み書き可能であること)
-  # - ./volume-storage/images
   storage:
     image: nginx:alpine
     volumes:
@@ -50,9 +47,9 @@ services:
       AIRFLOW_API_URL: http://airflow-webserver:8080/api/v1
       STORAGE_URL: http://storage
     ports:
-      - 8000:8000 # メイン
-      - 8001:8001 # 管理画面
-      - 8002:8002 # Airflow連携用内部API
+      - "8000:8000" # メイン
+      - "8001:8001" # 管理画面
+      - "8002:8002" # Airflow連携用内部API
     volumes:
       - ./volume-backend-logs:/app/logs
     depends_on:
@@ -66,13 +63,11 @@ services:
   airflow-common: &airflow-common
     build: ./airflow
     environment:
-      # パスワード不要の接続
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres@db:5432/airflow
       AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
       AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://postgres@db:5432/airflow
       AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-      # 認証無効化（信頼できる環境）
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__API__AUTH_BACKEND: airflow.api.auth.backend.default
       BACKEND_INTERNAL_URL: http://backend:8002
     volumes:
@@ -88,9 +83,8 @@ services:
   airflow-webserver:
     <<: *airflow-common
     command: webserver
-    # ローカル開発用にlocalhostのみ公開
     ports:
-      - 8003:8080
+      - "8003:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s
@@ -112,8 +106,6 @@ services:
     command: celery worker -q capture --concurrency 2
     deploy:
       replicas: 2
-    environment:
-      DISPLAY: ":99"
 
   airflow-worker-coords:
     <<: *airflow-common
@@ -121,15 +113,33 @@ services:
     deploy:
       replicas: 2
 
-  airflow-worker-tiles:
+  airflow-worker-tile-cut:
     <<: *airflow-common
-    command: celery worker -q tiles --concurrency 2
+    command: celery worker -q tile_cut --concurrency 2
     deploy:
       replicas: 2
 
-  airflow-worker-cleanup:
+  airflow-worker-tile-merge:
     <<: *airflow-common
-    command: celery worker -q cleanup --concurrency 2
+    command: celery worker -q tile_merge --concurrency 2
+    deploy:
+      replicas: 2
+
+  airflow-worker-tile-compress:
+    <<: *airflow-common
+    command: celery worker -q tile_compress --concurrency 2
+    deploy:
+      replicas: 2
+
+  airflow-worker-tile-cleanup:
+    <<: *airflow-common
+    command: celery worker -q tile_cleanup --concurrency 2
+    deploy:
+      replicas: 2
+
+  airflow-worker-screenshot-cleanup:
+    <<: *airflow-common
+    command: celery worker -q screenshot_cleanup --concurrency 2
     deploy:
       replicas: 2
 
@@ -145,8 +155,6 @@ services:
       - ./volume-storage:/data
       - ./volume-bin:/app/bin
       - ./volume-save:/root/simutrans
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
     deploy:
       replicas: 2
     restart: unless-stopped
@@ -161,8 +169,28 @@ services:
       replicas: 2
     restart: unless-stopped
 
-  service-tiles:
-    build: ./service-tiles
+  service-tile-cut:
+    build: ./service-tile-cut
+    environment:
+      STORAGE_URL: http://storage
+    volumes:
+      - ./volume-storage:/data
+    deploy:
+      replicas: 2
+    restart: unless-stopped
+
+  service-tile-merge:
+    build: ./service-tile-merge
+    environment:
+      STORAGE_URL: http://storage
+    volumes:
+      - ./volume-storage:/data
+    deploy:
+      replicas: 2
+    restart: unless-stopped
+
+  service-tile-compress:
+    build: ./service-tile-compress
     environment:
       STORAGE_URL: http://storage
       AVIF_QUALITY: "30"
