@@ -35,7 +35,9 @@
     - `jobs`: ジョブ管理（`job_id`, `game_id`, `save_data_name`, `status`, `created_at` など）
     - `savedatas`: セーブデータ情報
     - `screenshots`: スクリーンショットと推定座標（`screenshot_id`, `job_id`, `x`, `y`, `estimated_x`, `estimated_y`, `filepath`, `status` など）
-    - `tiles`: タイルメタデータ（`tile_id`, `job_id`, `z`, `x`, `y`, `filepath` など）
+    - `tiles`: タイルメタデータ（`tile_id`, `job_id`, `z`, `x`, `y`, `filepath`, `compressed`, `source_type` など）
+      - `compressed`: 圧縮済みかどうか（boolean）
+      - `source_type`: タイルの生成元（`screenshot`, `merged`）
   - `airflow`: Airflowメタデータ
     - `dag_run`: DAG実行履歴
     - `task_instance`: タスク実行状態
@@ -45,7 +47,7 @@
 - **役割**: メッセージブローカー
 - **責務**:
   - Celery（Airflow Worker）のタスクキュー管理
-  - キュー: `capture`, `coords`, `tiles`, `cleanup`
+  - キュー: `capture`, `coords`, `tile_cut`, `tile_merge`, `tile_compress`, `tile_cleanup`, `screenshot_cleanup`
 - **接続元**:
   - airflow-scheduler（タスク投入）
   - airflow-worker-*（タスク取得）
@@ -62,11 +64,15 @@
   /data/
     images/
       screenshots/
-        {screenshot_id}.png     # 一時データ
-      tiles/
+        {screenshot_id}.png # 一時データ
+      rawtiles/
         {z}/
           {x}/
-            {y}.avif            # 永続データ
+            {y}.png # 未圧縮タイル（一時データ）
+      tiles
+        {z}/
+          {x}/
+            {y}.avif # 圧縮タイル（永続データ）
   ```
 - **エンドポイント**:
 
@@ -75,15 +81,21 @@
   | PUT | `/images/screenshots/{screenshot_id}.png` | スクリーンショット保存 |
   | GET | `/images/screenshots/{screenshot_id}.png` | スクリーンショット取得 |
   | DELETE | `/images/screenshots/{screenshot_id}.png` | スクリーンショット削除 |
-  | PUT | `/images/tiles/{z}/{x}/{y}.avif` | タイル保存 |
-  | GET | `/images/tiles/{z}/{x}/{y}.avif` | タイル取得 |
+  | PUT | `/images/rawtiles/{z}/{x}/{y}.png` | 未圧縮タイル保存 |
+  | GET | `/images/rawtiles/{z}/{x}/{y}.png` | 未圧縮タイル取得 |
+  | DELETE | `/images/rawtiles/{z}/{x}/{y}.png` | 未圧縮タイル削除 |
+  | PUT | `/images/tiles/{z}/{x}/{y}.avif` | 圧縮タイル保存 |
+  | GET | `/images/tiles/{z}/{x}/{y}.avif` | 圧縮タイル取得 |
 
 - **接続元**:
-  - service-capture（PUT）
-  - service-coords（GET）
-  - service-tiles（GET, PUT）
-  - airflow-worker-cleanup（DELETE）
-  - backend（GET - タイル配信）
+  - service-capture（PUT - スクリーンショット）
+  - service-coords（GET - スクリーンショット）
+  - service-tile-cut（GET - スクリーンショット, PUT - 未圧縮タイル）
+  - service-tile-merge（GET - 未圧縮タイル, PUT - 未圧縮タイル）
+  - service-tile-compress（GET - 未圧縮タイル, PUT - 圧縮タイル）
+  - airflow-worker-screenshot-cleanup（DELETE - スクリーンショット）
+  - airflow-worker-tile-cleanup（DELETE - 未圧縮タイル）
+  - backend（GET - 圧縮タイル配信）
 - **ポート**: `80`
 - **設定**: nginx WebDAV有効化、最大アップロードサイズ 50MB
 
@@ -133,13 +145,15 @@
 |---|---|---|---|---|
 | POST | `/api/internal/screenshots` | スクリーンショットメタデータ保存 | `{"job_id": 0, "screenshot_id": "string", "x": 0, "y": 0, "filepath": "string"}` | `{"success": true}` |
 | PUT | `/api/internal/screenshots/{screenshot_id}` | スクリーンショットの推定座標更新 | `{"estimated_x": 0, "estimated_y": 0}` | `{"success": true}` |
-| POST | `/api/internal/tiles` | タイルメタデータ保存 | `{"job_id": 0, "tiles": []}` | `{"success": true}` |
-| DELETE | `/api/internal/screenshots/{screenshot_id}` | スクリーンショット削除（ファイル＋DB） | - | `{"success": true}` |
+| DELETE | `/api/internal/screenshots/{screenshot_id}` | スクリーンショット削除（DB） | - | `{"success": true}` |
+| POST | `/api/internal/tiles` | タイルメタデータ保存（未圧縮） | `{"job_id": 0, "tiles": [{"z": 0, "x": 0, "y": 0, "filepath": "string", "source_type": "string"}]}` | `{"success": true}` |
+| PUT | `/api/internal/tiles/compress` | タイル圧縮完了を記録 | `{"tile_ids": [0, 1, 2], "compressed_filepath": "string"}` | `{"success": true}` |
+| DELETE | `/api/internal/tiles/{tile_id}` | タイル削除（DB） | - | `{"success": true}` |
 
 ##### タイル配信 API
 | メソッド | パス | 説明 |
 |---|---|---|
-| GET | `/tiles/{z}/{x}/{y}.avif` | タイル画像配信（storage へプロキシ） |
+| GET | `/tiles/{z}/{x}/{y}.avif` | タイル画像配信（storage `/images/tiles/` へプロキシ） |
 
 ### 2.3 Airflow層
 
@@ -220,49 +234,121 @@
   6. Backend の `/api/internal/screenshots/{id}` を呼び出して推定座標を更新
   7. airflow DB でタスクを `success` 状態に更新
 
-#### airflow-worker-tiles
-- **役割**: タイル切り出しタスク実行ワーカー
+#### airflow-worker-tile-cut
+- **役割**: 最大ズームタイル切り出しタスク実行ワーカー（未圧縮）
 - **責務**:
-  - `tiles` キューからタスク取得
+  - `tile_cut` キューからタスク取得
   - 前タスクの結果を XCom から取得
-  - `service-tiles` サービス呼び出し
+  - `service-tile-cut` サービス呼び出し
   - Backend API を通じて結果を `gamedb` に永続化
   - タスク状態更新
 - **DB接続**:
   - `airflow`: 読み書き（タスク状態、XCom）
 - **呼び出し先**:
   - redis: タスク取得
-  - service-tiles: タイル切り出し依頼
+  - service-tile-cut: タイル切り出し依頼
   - backend: 結果の永続化
 - **レプリカ数**: `2`
 - **処理フロー**:
   1. Redis からタスク取得
   2. airflow DB でタスクを `running` 状態に更新
   3. airflow DB の XCom から複数の前タスク結果取得
-  4. `service-tiles` を呼び出し
+  4. `service-tile-cut` を呼び出し
   5. レスポンスを airflow DB の XCom に保存
   6. Backend の `/api/internal/tiles` を呼び出してタイル情報を永続化
   7. airflow DB でタスクを `success` 状態に更新
 
-#### airflow-worker-cleanup
-- **役割**: スクリーンショット削除タスク実行ワーカー
+#### airflow-worker-tile-merge
+- **役割**: タイルマージタスク実行ワーカー（ズームアウト画像生成）
 - **責務**:
-  - `cleanup` キューからタスク取得
-  - スクリーンショットがもう使用されないことを確認
-  - Backend API を通じてスクリーンショットを削除（ファイル + DBレコード）
+  - `tile_merge` キューからタスク取得
+  - 前タスクの結果を XCom から取得
+  - `service-tile-merge` サービス呼び出し
+  - Backend API を通じて結果を `gamedb` に永続化
   - タスク状態更新
 - **DB接続**:
   - `airflow`: 読み書き（タスク状態、XCom）
 - **呼び出し先**:
   - redis: タスク取得
+  - service-tile-merge: タイルマージ依頼
+  - backend: 結果の永続化
+- **レプリカ数**: `2`
+- **処理フロー**:
+  1. Redis からタスク取得
+  2. airflow DB でタスクを `running` 状態に更新
+  3. airflow DB の XCom から子タイル（4枚）の情報取得
+  4. `service-tile-merge` を呼び出し
+  5. レスポンスを airflow DB の XCom に保存
+  6. Backend の `/api/internal/tiles` を呼び出してマージタイル情報を永続化
+  7. airflow DB でタスクを `success` 状態に更新
+
+#### airflow-worker-tile-compress
+- **役割**: タイル圧縮タスク実行ワーカー
+- **責務**:
+  - `tile_compress` キューからタスク取得
+  - 前タスクの結果を XCom から取得
+  - `service-tile-compress` サービス呼び出し
+  - Backend API を通じて結果を `gamedb` に永続化
+  - タスク状態更新
+- **DB接続**:
+  - `airflow`: 読み書き（タスク状態、XCom）
+- **呼び出し先**:
+  - redis: タスク取得
+  - service-tile-compress: タイル圧縮依頼
+  - backend: 結果の永続化
+- **レプリカ数**: `2`
+- **処理フロー**:
+  1. Redis からタスク取得
+  2. airflow DB でタスクを `running` 状態に更新
+  3. airflow DB の XCom から未圧縮タイル情報取得
+  4. `service-tile-compress` を呼び出し
+  5. レスポンスを airflow DB の XCom に保存
+  6. Backend の `/api/internal/tiles/compress` を呼び出して圧縮完了を記録
+  7. airflow DB でタスクを `success` 状態に更新
+
+#### airflow-worker-tile-cleanup
+- **役割**: 未圧縮タイル削除タスク実行ワーカー
+- **責務**:
+  - `tile_cleanup` キューからタスク取得
+  - 未圧縮タイルがもう使用されないことを確認
+  - Backend API とストレージを通じて未圧縮タイルを削除（ファイル + DBレコード）
+  - タスク状態更新
+- **DB接続**:
+  - `airflow`: 読み書き（タスク状態、XCom）
+- **呼び出し先**:
+  - redis: タスク取得
+  - storage: 未圧縮タイル削除
+  - backend: タイル削除指示
+- **レプリカ数**: `2`
+- **処理フロー**:
+  1. Redis からタスク取得
+  2. airflow DB でタスクを `running` 状態に更新
+  3. XCom から対象タイルID取得
+  4. Storage の `/images/rawtiles/{z}/{x}/{y}.png` DELETE を呼び出し
+  5. Backend の `/api/internal/tiles/{tile_id}` DELETE を呼び出し
+  6. airflow DB でタスクを `success` 状態に更新
+
+#### airflow-worker-screenshot-cleanup
+- **役割**: スクリーンショット削除タスク実行ワーカー
+- **責務**:
+  - `screenshot_cleanup` キューからタスク取得
+  - スクリーンショットがもう使用されないことを確認
+  - ストレージと Backend API を通じてスクリーンショットを削除（ファイル + DBレコード）
+  - タスク状態更新
+- **DB接続**:
+  - `airflow`: 読み書き（タスク状態、XCom）
+- **呼び出し先**:
+  - redis: タスク取得
+  - storage: スクリーンショット削除
   - backend: スクリーンショット削除指示
 - **レプリカ数**: `2`
 - **処理フロー**:
   1. Redis からタスク取得
   2. airflow DB でタスクを `running` 状態に更新
   3. XCom から対象スクリーンショットID取得
-  4. Backend の `/api/internal/screenshots/{id}` DELETE を呼び出し
-  5. airflow DB でタスクを `success` 状態に更新
+  4. Storage の `/images/screenshots/{screenshot_id}.png` DELETE を呼び出し
+  5. Backend の `/api/internal/screenshots/{id}` DELETE を呼び出し
+  6. airflow DB でタスクを `success` 状態に更新
 
 ### 2.5 処理サービス層
 
@@ -295,15 +381,6 @@
   - TTLは10分。
 - **ポート**: `5000`
 
-スキーマ
-```
-{
-  "save_data_name": string,
-  "x": number,
-  "y": number
-}
-```
-
 #### service-coords
 - **役割**: 座標推定サービス（Python + Flask + OpenCV）
 - **責務**:
@@ -329,30 +406,20 @@
   4. メモリ解放
   5. 推定座標を返却
 - **ポート**: `5001`
+- **環境変数**:
+  - `IMAGE_WIDTH`: 画像の横サイズ（px）、左右マージンを含んだ最終画像サイズ
+  - `IMAGE_HEIGHT`: 画像の縦サイズ（px）、上下マージンを含んだ最終画像サイズ
+  - `IMAGE_MARGIN_WIDTH`: 左右それぞれの未描画マージン幅（px）
+  - `IMAGE_MARGIN_HEIGHT`: 上下それぞれの未描画マージン高さ（px）
+  - `STORAGE_URL`: 画像取得元の base URL
 
-環境変数
-- IMAGE_WIDTH
-  - 画像の横サイズ（px）
-  - 左右マージンを含んだ最終画像サイズ
-- IMAGE_HEIGHT
-  - 画像の縦サイズ（px）
-  - 上下マージンを含んだ最終画像サイズ
-- IMAGE_MARGIN_WIDTH
-  - 左右それぞれの未描画マージン幅（px）
-- IMAGE_MARGIN_HEIGHT
-  - 上下それぞれの未描画マージン高さ（px）
-- STORAGE_URL
-  - 画像取得元の base URL
-  - STORAGE_URL + image_path に GET すると PNG 画像が取得できる
-
-#### service-tiles
-- **役割**: タイル切り出しサービス（Python + Flask + Pillow）
+#### service-tile-cut
+- **役割**: 最大ズームタイル切り出しサービス（Python + Flask + Pillow）
 - **責務**:
-  - storage から複数の画像取得
+  - storage から複数のスクリーンショットを取得
   - 座標情報を元に画像を結合
   - 指定範囲を切り出し
-  - AVIF形式（quality 30）で圧縮
-  - storage へタイル保存
+  - 未圧縮PNG形式で storage へ保存
   - タイルパスを返却
 - **DB接続**: なし
 - **呼び出し先**:
@@ -361,7 +428,7 @@
 
   | メソッド | パス | 説明 | リクエスト | レスポンス |
   |---|---|---|---|---|
-  | POST | `/cut` | タイル切り出し | `{"images": [], "tile_x": 0, "tile_y": 0, "tile_size": 0}` | `{"tile_path": "string"}` |
+  | POST | `/cut` | タイル切り出し | `{"images": [{"id": "string", "path": "string", "x": number, "y": number}], "tile_x": number, "tile_y": number, "tile_size": number}` | `{"tile_path": "string"}` |
 
 - **レプリカ数**: `2`
 - **処理フロー**:
@@ -369,11 +436,63 @@
   2. 複数画像を storage から取得
   3. 仮想キャンバスに配置
   4. タイル範囲を切り出し
-  5. AVIF（quality 30）に圧縮
-  6. storage に保存
-  7. メモリ解放
-  8. タイルパスを返却
+  5. 未圧縮PNG形式で storage の `/images/rawtiles/{z}/{x}/{y}.png` に保存
+  6. メモリ解放
+  7. タイルパスを返却
 - **ポート**: `5002`
+
+#### service-tile-merge
+- **役割**: タイルマージサービス（Python + Flask + Pillow）
+- **責務**:
+  - storage から4枚の子タイルを取得
+  - 2x2で結合し、1/2にリサイズ
+  - 未圧縮PNG形式で storage へ保存
+  - タイルパスを返却
+- **DB接続**: なし
+- **呼び出し先**:
+  - storage: タイル取得（GET）、タイル保存（PUT）
+- **エンドポイント**:
+
+  | メソッド | パス | 説明 | リクエスト | レスポンス |
+  |---|---|---|---|---|
+  | POST | `/merge` | タイルマージ | `{"child_tiles": [{"path": "string"}], "parent_z": number, "parent_x": number, "parent_y": number, "tile_size": number}` | `{"tile_path": "string"}` |
+
+- **レプリカ数**: `2`
+- **処理フロー**:
+  1. リクエスト受信
+  2. 4枚の子タイル画像を storage から取得
+  3. 2x2の配置で結合（2 * tile_size の正方形画像）
+  4. 1/2にリサイズ（tile_size の正方形画像）
+  5. 未圧縮PNG形式で storage の `/images/tiles/raw/{z}/{x}/{y}.png` に保存
+  6. メモリ解放
+  7. タイルパスを返却
+- **ポート**: `5003`
+
+#### service-tile-compress
+- **役割**: タイル圧縮サービス（Python + Flask + pillow-avif-plugin）
+- **責務**:
+  - storage から未圧縮タイルを取得
+  - AVIF形式（quality 30）で圧縮
+  - storage へ圧縮タイルを保存
+  - タイルパスを返却
+- **DB接続**: なし
+- **呼び出し先**:
+  - storage: タイル取得（GET）、タイル保存（PUT）
+- **エンドポイント**:
+
+  | メソッド | パス | 説明 | リクエスト | レスポンス |
+  |---|---|---|---|---|
+  | POST | `/compress` | タイル圧縮 | `{"raw_tile_path": "string", "z": number, "x": number, "y": number}` | `{"compressed_tile_path": "string"}` |
+
+- **レプリカ数**: `2`
+- **処理フロー**:
+  1. リクエスト受信
+  2. storage から未圧縮タイルを取得
+  3. AVIF（quality 30）に圧縮
+  4. storage の `/images/tiles/compressed/{z}/{x}/{y}.avif` に保存
+  5. メモリ解放
+  6. タイルパスを返却
+- **ポート**: `5004`
 
 ## 3. UseCase 1: マップタイル生成フロー
 
@@ -384,12 +503,48 @@
 3. Airflow Scheduler がタスクを生成・スケジューリング
 4. スクリーンショット撮影タスク（並列実行）
 5. 座標推定タスク（並列実行）
-6. タイル切り出しタスク（並列実行）
-7. スクリーンショット削除タスク（各スクショの使用完了後、個別に実行）
-8. 完了、管理画面でステータスを確認
+6. 最大ズームタイル切り出しタスク（並列実行、未圧縮PNG）
+7. 分岐A: 最大ズームタイル圧縮タスク（並列実行）
+   → 未圧縮タイル削除タスク
+8. 分岐B: ズームアウトタイルマージタスク（複数段階、並列実行、未圧縮PNG）
+   → 各段階で圧縮タスク（並列実行）
+   → 未圧縮タイル削除タスク
+9. スクリーンショット削除タスク（各スクショの使用完了後、個別に実行）
+10. 完了、管理画面でステータスを確認
 ```
 
-### 3.2 詳細フロー
+ここでは未圧縮タイル削除タスクが2回書かれているが、実際にはDAGで適切に依存関係を設定することで、各タイルが使用されなくなったタイミングで1回だけ実行される。
+
+### 3.2 タスク依存関係の詳細
+
+最大ズームレベルを `z_max`、最小ズームレベルを `z_min` とします。
+
+```text
+capture_{i}
+  >> coords_{i}
+  >> tile_cut_{z_max}_{x}_{y}  (最大ズームタイル切り出し)
+  >> [
+       tile_compress_{z_max}_{x}_{y}  (最大ズームタイル圧縮)
+         >> tile_cleanup_{z_max}_{x}_{y}  (未圧縮タイル削除)
+       ,
+       tile_merge_{z_max-1}_{x/2}_{y/2}  (ズームアウト1段階目)
+         >> tile_compress_{z_max-1}_{x/2}_{y/2}
+         >> tile_cleanup_{z_max-1}_{x/2}_{y/2}
+         >> tile_merge_{z_max-2}_{x/4}_{y/4}  (ズームアウト2段階目)
+         >> ...
+         >> tile_merge_{z_min}_{...}_{...}  (最小ズームまで)
+         >> tile_compress_{z_min}_{...}_{...}
+         >> tile_cleanup_{z_min}_{...}_{...}
+     ]
+  >> screenshot_cleanup_{i}  (全タイル完了後にスクショ削除)
+```
+
+**依存関係の詳細**:
+- `tile_merge_{z}_{x}_{y}` は4枚の子タイル（`tile_cut_{z+1}_{2x}_{2y}`, `tile_cut_{z+1}_{2x+1}_{2y}`, `tile_cut_{z+1}_{2x}_{2y+1}`, `tile_cut_{z+1}_{2x+1}_{2y+1}`）または4枚のマージタイルの**圧縮完了**を待つ
+- `tile_cleanup_{z}_{x}_{y}` は該当タイルを使用するすべてのタスク（圧縮タスク、またはマージタスク）の完了を待つ
+- `screenshot_cleanup_{i}` は該当スクリーンショットを使用するすべての `tile_cut` タスクの子孫タスク（圧縮、マージ、削除すべて）の完了を待つ
+
+### 3.3 詳細フロー
 
 #### Step 1: タイル生成ジョブ作成
 ユーザーは管理画面からゲームID（例: `"city01"`）とセーブデータ名（例: `"save_001"`）を指定して「タイル生成」ボタンを押下します。Backendは `POST /api/tiles/create` リクエストを受け取ります。
@@ -397,6 +552,7 @@
 Backendは以下を実行します:
 - gamedbに新しいジョブレコードを作成（`status='preparing'`）
 - 撮影対象エリアのリストを計算
+- タイル生成パラメータを計算（最大ズーム、最小ズーム、タイル依存関係）
 - AirflowのDAG起動APIを呼び出し、`map_processing` DAGを起動
 - 起動された `dag_run_id` を取得してDBに保存
 - ジョブステータスを `running` に更新
@@ -409,28 +565,24 @@ Backendはクライアントに以下を返します:
 ブラウザは `/api/status` を3秒ごとにポーリング開始します。
 
 #### Step 2: タスク生成とスケジューリング
-Airflow Schedulerはdag_runを検知し、DAG定義ファイルを読み込みます。パラメータから撮影エリア数（例: 10,000）とタイル依存関係（各タイルが依存するスクリーンショットのエリアID）を取得し、以下のタスクを動的に生成します:
+Airflow Schedulerはdag_runを検知し、DAG定義ファイルを読み込みます。パラメータから撮影エリア数（例: 10,000）、ズームレベル範囲（例: z_max=18, z_min=0）、タイル依存関係を取得し、以下のタスクを動的に生成します:
 
-- `capture_0`, `capture_1`, ..., `capture_9999`（スクリーンショット撮影）
-- `coords_0`, `coords_1`, ..., `coords_9999`（座標推定）
-- `tile_1_10_20`, `tile_1_10_21`, ...（タイル切り出し、数十万個）
-- `cleanup_0`, `cleanup_1`, ..., `cleanup_9999`（スクリーンショット削除）
-
-タスク間の依存関係を設定します:
-```text
-capture_0 >> coords_0
-coords_0 >> tile_1_10_20
-coords_1 >> tile_1_10_20
-... (タイルに必要なすべてのcoords完了まで)
-tile_1_10_20 >> cleanup_0 (cleanup_0が使用するすべてのタイル完了)
-tile_1_10_21 >> cleanup_0
-... (タイル0に関連するすべてのタイル完了)
-```
+- `capture_*_*`（スクリーンショット撮影）
+- `coords_*_*`（座標推定）
+- `tile_cut_18_*_*`（最大ズームタイル切り出し、数十万個）
+- `tile_compress_18_*_*`（最大ズームタイル圧縮）
+- `tile_cleanup_18_*_*`（未圧縮タイル削除）
+- `tile_merge_17_*_*`, `tile_compress_17_*_*`, `tile_cleanup_17_*_*`（ズームレベル17）
+- `tile_merge_16_*_*`, `tile_compress_16_*_*`, `tile_cleanup_16_*_*`（ズームレベル16）
+- ...（ズームレベル0まで）
+- `screenshot_cleanup_0`, `screenshot_cleanup_1`, ...（スクリーンショット削除）
 
 Schedulerは実行可能なタスク（`capture_*`）をRedisの `capture` キューに投入します。
 
+ズームレベル範囲はpaksetのサイズとマップのサイズに基づいて決定される。
+
 #### Step 3: スクリーンショット撮影
-`airflow-worker-capture` は `capture` キューからタスク（例: `"capture_0"`）を取得します。
+`airflow-worker-capture` は `capture` キューからタスク（例: `"capture_0_0"`）を取得します。
 
 Worker は以下を実行します:
 - airflow DBでタスクを `running` に更新
@@ -438,7 +590,7 @@ Worker は以下を実行します:
 - `service-capture` を呼び出し: `POST http://service-capture:5000/capture`
   ```json
   {
-    "save_data_name": "save_001",
+    "save_data_name": "save_demo",
     "x": 0,
     "y": 0
   }
@@ -473,14 +625,16 @@ Worker は以下を実行します:
 Worker は以下を実行します:
 - airflow DBでタスクを `running` に更新
 - XComから `capture_0` の結果を取得（`{"image_path": "/images/screenshots/shot_abc123.png"}`）
-- DAGの設定から期待座標（ヒント）を取得（例: `hint_x=1024`, `hint_y=2048`）
+- DAGの設定から期待座標（ヒント）と隣接画像を取得
 - `service-coords` を呼び出し: `POST http://service-coords:5001/estimate`
   ```json
   {
     "image_path": "/images/screenshots/shot_abc123.png",
-    "adjacent_images": ["/images/screenshots/shot_def456.png"],
+    "adjacent_images": [
+      {"image_path": "/images/screenshots/shot_def456.png", "x": 0, "y": 1024}
+    ],
     "hint_x": 1024,
-    "hint_y": 2048
+    "hint_y": 1024
   }
   ```
 
@@ -502,10 +656,10 @@ Worker は以下を実行します:
 - Backendは `screenshots` テーブルの該当レコードに推定座標を更新
 - airflow DBでタスクを `success` に更新
 
-#### Step 5: タイル切り出し
-あるタイル（例: `tile_1_10_20`）に必要なすべてのcoords完了（例: `coords_0`, `coords_1`, `coords_128`, `coords_129`）後、`tile_1_10_20` が実行可能になります。
+#### Step 5: 最大ズームタイル切り出し
+あるタイル（例: `tile_cut_18_10_20`）に必要なすべてのcoords完了（例: `coords_0_0`, `coords_10_10`）後、`tile_cut_18_10_20` が実行可能になります。
 
-`airflow-worker-tiles` は `tiles` キューからタスク（`"tile_1_10_20"`）を取得します。
+`airflow-worker-tile-cut` は `tile_cut` キューからタスク（`"tile_cut_18_10_20"`）を取得します。
 
 Worker は以下を実行します:
 - airflow DBでタスクを `running` に更新
@@ -521,23 +675,23 @@ Worker は以下を実行します:
     }
   ]
   ```
-- `service-tiles` を呼び出し: `POST http://service-tiles:5002/cut`
+- `service-tile-cut` を呼び出し: `POST http://service-tile-cut:5002/cut`
   ```json
   {
-    "images": [],
+    "images": [...],
+    "tile_z": 18,
     "tile_x": 10,
     "tile_y": 20,
     "tile_size": 512
   }
   ```
 
-`service-tiles` は以下を実行します:
+`service-tile-cut` は以下を実行します:
 - storageから複数の画像を取得
 - 仮想キャンバス上に座標に基づいて配置
-- タイル範囲（`x=10`, `y=20`, `size=512`）を切り出し
-- AVIF（quality 30）に圧縮
-- storageへ `PUT /images/tiles/1/10/20.avif` で保存
-- `{"tile_path": "/images/tiles/1/10/20.avif"}` を返却
+- タイル範囲（`z=18`, `x=10`, `y=20`, `size=512`）を切り出し
+- 未圧縮PNG形式で storageへ `PUT /images/rawtiles/18/10/20.png` で保存
+- `{"tile_path": "/images/rawtiles/18/10/20.png"}` を返却
 
 Worker は以下を実行します:
 - レスポンスを受け取り、airflow DBのXComに保存
@@ -547,39 +701,136 @@ Worker は以下を実行します:
     "job_id": 123,
     "tiles": [
       {
-        "z": 1,
+        "z": 18,
         "x": 10,
         "y": 20,
-        "filepath": "/images/tiles/1/10/20.avif"
+        "filepath": "/images/rawtiles/18/10/20.png",
+        "source_type": "screenshot"
       }
     ]
   }
   ```
-- Backendは `tiles` テーブルにレコード挿入
+- Backendは `tiles` テーブルにレコード挿入（`compressed=false`, `source_type='screenshot'`）
 - airflow DBでタスクを `success` に更新
 
-#### Step 6: スクリーンショット削除
-DAG設計では、各スクリーンショットを利用するすべてのタイル生成タスクが完了したとき、対応する削除タスク（`cleanup_0`）が実行可能になります。
+#### Step 6: 最大ズームタイル圧縮
+`tile_cut_18_10_20` タスクが完了すると `tile_compress_18_10_20` が実行可能になります。
 
-例えば、スクリーンショットID `"shot_abc123"` が `tile_1_10_20` と `tile_1_10_21` の両方で使用される場合、両タイルが完了するまで `cleanup_0` は待機します。
+`airflow-worker-tile-compress` は `tile_compress` キューからタスク（`"tile_compress_18_10_20"`）を取得します。
 
-`airflow-worker-cleanup` は `cleanup` キューからタスク（`"cleanup_0"`）を取得します。
+Worker は以下を実行します:
+- airflow DBでタスクを `running` に更新
+- XComから `tile_cut_18_10_20` の結果を取得（`{"tile_path": "/images/rawtiles/18/10/20.png"}`）
+- `service-tile-compress` を呼び出し: `POST http://service-tile-compress:5004/compress`
+  ```json
+  {
+    "raw_tile_path": "/images/rawtiles/18/10/20.png",
+    "z": 18,
+    "x": 10,
+    "y": 20
+  }
+  ```
+
+`service-tile-compress` は以下を実行します:
+- storageから未圧縮タイルを取得
+- AVIF（quality 30）に圧縮
+- storageへ `PUT /images/tiles/18/10/20.avif` で保存
+- `{"compressed_tile_path": "/images/tiles/18/10/20.avif"}` を返却
+
+Worker は以下を実行します:
+- レスポンスを受け取り、airflow DBのXComに保存
+- Backend の `PUT /api/internal/tiles/compress` を呼び出し:
+  ```json
+  {
+    "tile_ids": [456],
+    "compressed_filepath": "/images/tiles/18/10/20.avif"
+  }
+  ```
+- Backendは `tiles` テーブルの該当レコードを更新（`compressed=true`, `filepath` を圧縮版に更新）
+- airflow DBでタスクを `success` に更新
+
+#### Step 7: ズームアウトタイルマージ
+4枚の子タイル（例: `tile_compress_18_20_40`, `tile_compress_18_21_40`, `tile_compress_18_20_41`, `tile_compress_18_21_41`）が完了すると、`tile_merge_17_10_20` が実行可能になります。
+
+`airflow-worker-tile-merge` は `tile_merge` キューからタスク（`"tile_merge_17_10_20"`）を取得します。
+
+Worker は以下を実行します:
+- airflow DBでタスクを `running` に更新
+- XComから4枚の子タイルの情報を取得
+- `service-tile-merge` を呼び出し: `POST http://service-tile-merge:5003/merge`
+  ```json
+  {
+    "child_tiles": [
+      {"path": "/images/rawtiles/18/20/40.png"},
+      {"path": "/images/rawtiles/18/21/40.png"},
+      {"path": "/images/rawtiles/18/20/41.png"},
+      {"path": "/images/rawtiles/18/21/41.png"}
+    ],
+    "parent_z": 17,
+    "parent_x": 10,
+    "parent_y": 20,
+    "tile_size": 512
+  }
+  ```
+
+`service-tile-merge` は以下を実行します:
+- storageから4枚の子タイルを取得
+- 2x2で結合（1024x1024）
+- 1/2にリサイズ（512x512）
+- 未圧縮PNG形式で storageへ `PUT /images/rawtiles/17/10/20.png` で保存
+- `{"tile_path": "/images/rawtiles/17/10/20.png"}` を返却
+
+Worker は以下を実行します:
+- レスポンスを受け取り、airflow DBのXComに保存
+- Backend の `POST /api/internal/tiles` を呼び出し:
+  ```json
+  {
+    "job_id": 123,
+    "tiles": [
+      {
+        "z": 17,
+        "x": 10,
+        "y": 20,
+        "filepath": "/images/rawtiles/17/10/20.png",
+        "source_type": "merged"
+      }
+    ]
+  }
+  ```
+- Backendは `tiles` テーブルにレコード挿入（`compressed=false`, `source_type='merged'`）
+- airflow DBでタスクを `success` に更新
+
+その後、`tile_compress_17_10_20` が実行され、Step 6と同様の処理で圧縮されます。
+
+この処理がズームレベル0まで繰り返されます。
+
+#### Step 8: 未圧縮タイル削除
+`tile_compress_18_10_20` タスクが完了し、このタイルを必要とする他のタスク（この場合は `tile_merge_17_5_10`）も完了すると、`tile_cleanup_18_10_20` が実行可能になります。
+
+`airflow-worker-tile-cleanup` は `tile_cleanup` キューからタスク（`"tile_cleanup_18_10_20"`）を取得します。
+
+Worker は以下を実行します:
+- airflow DBでタスクを `running` に更新
+- XComから対象タイルの情報を取得
+- storageへ `DELETE /images/rawtiles/18/10/20.png` を呼び出し
+- Backend の `DELETE /api/internal/tiles/{tile_id}` を呼び出し
+- Backendは `tiles` テーブルから該当レコード削除（圧縮版レコードは残る）
+- airflow DBでタスクを `success` に更新
+
+#### Step 9: スクリーンショット削除
+DAG設計では、各スクリーンショットを利用するすべてのタイル生成タスクとその子孫タスク（マージ、圧縮、削除すべて）が完了したとき、対応する削除タスク（`screenshot_cleanup_0`）が実行可能になります。
+
+`airflow-worker-screenshot-cleanup` は `screenshot_cleanup` キューからタスク（`"screenshot_cleanup_0"`）を取得します。
 
 Worker は以下を実行します:
 - airflow DBでタスクを `running` に更新
 - XComから対象スクリーンショットID（例: `"shot_abc123"`）を取得
-- Backend の `DELETE /api/internal/screenshots/shot_abc123` を呼び出し
-
-Backend は以下を実行します:
 - storageへ `DELETE /images/screenshots/shot_abc123.png` でファイル削除
-- gamedbの `screenshots` テーブルから該当レコード削除
-
-Worker は以下を実行します:
+- Backend の `DELETE /api/internal/screenshots/shot_abc123` を呼び出し
+- Backendは `screenshots` テーブルから該当レコード削除
 - airflow DBでタスクを `success` に更新
 
-この方式により、すべての必要なタイル生成が完了するまでスクリーンショットが削除されることはなく、また不要になると速やかに削除されます。
-
-#### Step 7: 完了とステータス確認
+#### Step 10: 完了とステータス確認
 Airflow DAGの全タスクが完了すると、dag_runは `success` 状態になります。
 
 ブラウザはポーリングで定期的に `GET /api/status` を呼び出します。
@@ -621,8 +872,9 @@ Backend は以下を実行します:
 
 ブラウザ上で `MapLibre GL JS` が初期化されます。タイルレイヤーとして以下を指定します:
 ```javascript
-L.tileLayer('http://backend:4567/tiles/{z}/{x}/{y}.avif', {
+L.tileLayer('http://backend:8000/tiles/{z}/{x}/{y}.avif', {
   maxZoom: 18,
+  minZoom: 0,
   attribution: 'Game Map'
 }).addTo(map);
 ```
@@ -631,15 +883,15 @@ L.tileLayer('http://backend:4567/tiles/{z}/{x}/{y}.avif', {
 
 ブラウザは並列（通常6-8並列）で以下のようなリクエストを送信します:
 ```text
-GET http://backend:4567/tiles/1/10/20.avif
-GET http://backend:4567/tiles/1/10/21.avif
+GET http://backend:8000/tiles/1/10/20.avif
+GET http://backend:8000/tiles/1/10/21.avif
 ... (計36リクエスト)
 ```
 
 #### Backend
 各タイルリクエストに対し、Backend は以下を実行します:
 - リクエストを受け取る（例: `GET /tiles/1/10/20.avif`）
-- storageにプロキシリクエスト: `GET http://storage:80/images/tiles/1/10/20.avif`
+- storageにプロキシリクエスト: `GET http://storage:80/images/tiles/compressed/1/10/20.avif`
 - storageからタイル画像バイナリを受け取る
 - ブラウザに返却:
   ```text
@@ -666,17 +918,26 @@ GET http://backend:4567/tiles/1/10/21.avif
 |---|---:|---|
 | airflow-worker-capture | 2 | capture キュー処理 |
 | airflow-worker-coords | 2 | coords キュー処理 |
-| airflow-worker-tiles | 2 | tiles キュー処理 |
-| airflow-worker-cleanup | 2 | cleanup キュー処理 |
+| airflow-worker-tile-cut | 2 | tile_cut キュー処理 |
+| airflow-worker-tile-merge | 2 | tile_merge キュー処理 |
+| airflow-worker-tile-compress | 2 | tile_compress キュー処理 |
+| airflow-worker-tile-cleanup | 2 | tile_cleanup キュー処理 |
+| airflow-worker-screenshot-cleanup | 2 | screenshot_cleanup キュー処理 |
 | service-capture | 2 | スクリーンショット撮影 |
 | service-coords | 2 | 座標推定 |
-| service-tiles | 2 | タイル切り出し |
+| service-tile-cut | 2 | タイル切り出し |
+| service-tile-merge | 2 | タイルマージ |
+| service-tile-compress | 2 | タイル圧縮 |
 
 ### 5.2 ボトルネック対策
 
 #### スクリーンショット撮影
 - ゲーム起動に時間がかかるため、撮影スループットがボトルネック。
 - 対策: `service-capture` と `airflow-worker-capture` のレプリカ数を確保し、並列度を維持。
+
+#### タイル処理
+- 最大ズームレベルでは数十万〜数百万のタイルを処理するため、タイル切り出し・マージ・圧縮がボトルネック。
+- 対策: 各処理を分離し、並列度を確保。未圧縮タイルの早期削除によりストレージ消費を抑制。
 
 #### Storage I/O
 - 大量の読み書きによるディスクI/Oがボトルネック。
@@ -685,16 +946,36 @@ GET http://backend:4567/tiles/1/10/21.avif
 #### タイル配信
 - CDN導入を検討。複数のBackendインスタンスで負荷分散。
 
+### 5.3 ストレージ最適化
+
+#### 段階的な削除戦略
+- **未圧縮タイル**: 圧縮完了後およびマージ完了後に即座に削除
+- **スクリーンショット**: すべての依存タイル処理完了後に削除
+- **圧縮タイル**: 永続保存
+
+#### ストレージ使用量の推定
+最大ズームタイル数を N とすると:
+- **スクリーンショット**: 約 N/100 枚（重複撮影考慮）、各 5MB → 合計 N/20 MB
+- **未圧縮タイル（最大同時）**: 最大ズームで N 枚、各 1MB → 最大 N MB（段階的削除により実際はより少ない）
+- **圧縮タイル（永続）**: 全ズームレベル合計で約 1.33N 枚、各 50KB → 約 N/15 MB
+
 ## 6. 重要な設計原則
 
 ### 6.1 責務の明確化
 - **Backend**: ビジネスロジック、gamedb管理、Airflow制御、API提供、HTML配信。
 - **Airflow**: DAG定義、タスク生成、依存関係管理、スケジューリング。
 - **Airflow Workers**: タスク実行、Service呼び出し、Backend APIとの連携。
-- **Services（service-capture/coords/tiles）**: 単一の専門処理のみを実行。ステートレス。他サービスやBackendの知識を持たない。
+- **Services（service-*）**: 単一の専門処理のみを実行。ステートレス。他サービスやBackendの知識を持たない。
 - **Storage**: ファイルのCRUD操作のみ。HTTPインターフェース。
 
 ### 6.2 変更耐性
 - Service の処理ロジック変更は、Backend や Airflow に影響しない。
 - Airflow DAGの構造変更は Service に影響しない。
 - Backend の API設計により、データ永続化の詳細が Workers に漏えいしない。
+
+### 6.3 段階的処理の利点
+- **メモリ効率**: 未圧縮タイルを早期削除することで、ストレージ使用量を抑制。
+- **並列性**: 切り出し、マージ、圧縮を独立したタスクにすることで、高い並列度を実現。
+- **失敗時の復旧**: 各段階が独立しているため、失敗したタスクのみ再実行可能。
+- **柔軟性**: 圧縮品質やズームレベル範囲の変更が容易。
+
