@@ -455,7 +455,7 @@
 
   | メソッド | パス | 説明 | リクエスト | レスポンス |
   |---|---|---|---|---|
-  | POST | `/merge` | タイルマージ | `{"child_tiles": [{"path": "string"}], "parent_z": number, "parent_x": number, "parent_y": number, "tile_size": number}` | `{"tile_path": "string"}` |
+  | POST | `/merge` | タイルマージ | `{"child_tiles": [{"path": "string"}], "parent_z": number, "parent_x": number, "parent_y": number}` | `{"tile_path": "string"}` |
 
 - **レプリカ数**: `2`
 - **処理フロー**:
@@ -766,8 +766,7 @@ Worker は以下を実行します:
     ],
     "parent_z": 17,
     "parent_x": 10,
-    "parent_y": 20,
-    "tile_size": 512
+    "parent_y": 20
   }
   ```
 
