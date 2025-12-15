@@ -1,0 +1,5 @@
+Flask==3.0.0
+Pillow==10.1.0
+pillow-avif-plugin==1.4.0  # AVIF形式対応
+requests==2.31.0
+gunicorn==21.2.0

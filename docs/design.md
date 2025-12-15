@@ -472,7 +472,7 @@
 - **役割**: タイル圧縮サービス（Python + Flask + pillow-avif-plugin）
 - **責務**:
   - storage から未圧縮タイルを取得
-  - AVIF形式（quality 30）で圧縮
+  - AVIF形式（qualityは環境変数で設定）で圧縮
   - storage へ圧縮タイルを保存
   - タイルパスを返却
 - **DB接続**: なし
@@ -482,13 +482,13 @@
 
   | メソッド | パス | 説明 | リクエスト | レスポンス |
   |---|---|---|---|---|
-  | POST | `/compress` | タイル圧縮 | `{"raw_tile_path": "string", "z": number, "x": number, "y": number}` | `{"compressed_tile_path": "string"}` |
+  | POST | `/compress` | タイル圧縮 | `{"z": number, "x": number, "y": number}` | `{}` |
 
 - **レプリカ数**: `2`
 - **処理フロー**:
   1. リクエスト受信
   2. storage から未圧縮タイルを取得
-  3. AVIF（quality 30）に圧縮
+  3. AVIFに圧縮
   4. storage の `/images/tiles/compressed/{z}/{x}/{y}.avif` に保存
   5. メモリ解放
   6. タイルパスを返却
@@ -723,7 +723,6 @@ Worker は以下を実行します:
 - `service-tile-compress` を呼び出し: `POST http://service-tile-compress:5004/compress`
   ```json
   {
-    "raw_tile_path": "/images/rawtiles/18/10/20.png",
     "z": 18,
     "x": 10,
     "y": 20
