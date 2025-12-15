@@ -428,7 +428,7 @@
 
   | メソッド | パス | 説明 | リクエスト | レスポンス |
   |---|---|---|---|---|
-  | POST | `/cut` | タイル切り出し | `{"images": [{"id": "string", "path": "string", "x": number, "y": number}], "tile_x": number, "tile_y": number, "tile_size": number}` | `{"tile_path": "string"}` |
+  | POST | `/cut` | タイル切り出し | `{"images": [{"id": "string", "path": "string", "x": number, "y": number}], "tile_x": number, "tile_y": number}` | `{"tile_path": "string"}` |
 
 - **レプリカ数**: `2`
 - **処理フロー**:
@@ -682,7 +682,6 @@ Worker は以下を実行します:
     "tile_z": 18,
     "tile_x": 10,
     "tile_y": 20,
-    "tile_size": 512
   }
   ```
 
