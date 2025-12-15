@@ -295,12 +295,23 @@
   - TTLは10分。
 - **ポート**: `5000`
 
+スキーマ
+```
+{
+  "save_data_name": string,
+  "x": number,
+  "y": number
+}
+```
+
 #### service-coords
 - **役割**: 座標推定サービス（Python + Flask + OpenCV）
 - **責務**:
   - storage から画像取得
-  - 画像解析による座標推定
-  - 推定座標を返却
+  - 既存画像（座標既知）と新画像（座標未知）を比較し、平行移動のみを仮定して新画像の絶対座標を推定する
+  - 画像は ピクセル単位で RGB が完全一致する重複領域を持つ
+  - 回転・スケール・歪みは一切存在しない
+  - 新座標の仮定値をヒントとして受け取り、海上などの推定困難な場合に使用する
 - **DB接続**: なし
 - **呼び出し先**:
   - storage: 画像取得（GET）
@@ -308,7 +319,7 @@
 
   | メソッド | パス | 説明 | リクエスト | レスポンス |
   |---|---|---|---|---|
-  | POST | `/estimate` | 座標推定 | `{"image_path": "string", "adjacent_images": [], "hint_x": 0, "hint_y": 0}` | `{"estimated_x": 0, "estimated_y": 0}` |
+  | POST | `/estimate` | 座標推定 | `{"image_path": "string", "adjacent_images": [{"image_path": "string", "x": number, "y": number}], "hint_x": number, "hint_y": number}` | `{"estimated_x": 0, "estimated_y": 0}` |
 
 - **レプリカ数**: `2`
 - **処理フロー**:
@@ -318,6 +329,21 @@
   4. メモリ解放
   5. 推定座標を返却
 - **ポート**: `5001`
+
+環境変数
+- IMAGE_WIDTH
+  - 画像の横サイズ（px）
+  - 左右マージンを含んだ最終画像サイズ
+- IMAGE_HEIGHT
+  - 画像の縦サイズ（px）
+  - 上下マージンを含んだ最終画像サイズ
+- IMAGE_MARGIN_WIDTH
+  - 左右それぞれの未描画マージン幅（px）
+- IMAGE_MARGIN_HEIGHT
+  - 上下それぞれの未描画マージン高さ（px）
+- STORAGE_URL
+  - 画像取得元の base URL
+  - STORAGE_URL + image_path に GET すると PNG 画像が取得できる
 
 #### service-tiles
 - **役割**: タイル切り出しサービス（Python + Flask + Pillow）
