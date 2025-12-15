@@ -44,7 +44,7 @@ def fetch_image(image_path):
 
 def estimate_with_sift(target_img, ref_img, ref_x, ref_y):
     """
-    SIFT特徴点マッチングで座標を推定（フォールバック用）
+    SIFT特徴点マッチングで座標を推定
     
     Args:
         target_img: 座標未知の画像
@@ -55,6 +55,11 @@ def estimate_with_sift(target_img, ref_img, ref_x, ref_y):
         推定座標 (x, y) or None
     """
     try:
+        # 縮小する(0.125倍)
+        # 予想として、シムトラのスクショのズレは標高などの影響を受けるため、キリの良い値になる
+        target_img = cv2.resize(target_img, (0, 0), fx=0.125, fy=0.125, interpolation=cv2.INTER_LINEAR)
+        ref_img = cv2.resize(ref_img, (0, 0), fx=0.125, fy=0.125, interpolation=cv2.INTER_LINEAR)
+
         # グレースケール変換
         gray1 = cv2.cvtColor(target_img, cv2.COLOR_BGR2GRAY)
         gray2 = cv2.cvtColor(ref_img, cv2.COLOR_BGR2GRAY)
@@ -93,8 +98,9 @@ def estimate_with_sift(target_img, ref_img, ref_x, ref_y):
         median_translation = np.median(translations, axis=0)
         
         # 推定座標を計算
-        estimated_x = ref_x - median_translation[0]
-        estimated_y = ref_y - median_translation[1]
+        estimated_x = (ref_x - median_translation[0]) * 8
+        # CV座標系ではy軸が上向きだが、スクショ座標系では下向き
+        estimated_y = (median_translation[1] - ref_y) * 8
         
         print(f"SIFT matching succeeded: estimated ({int(estimated_x)}, {int(estimated_y)})", flush=True)
         return int(estimated_x), int(estimated_y)
