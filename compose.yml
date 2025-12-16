@@ -67,18 +67,33 @@ services:
       AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
       AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://postgres@db:5432/airflow
       AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__API__AUTH_BACKEND: airflow.api.auth.backend.default
+      SERVICE_CAPTURE_URL: http://service-capture:5000
+      SERVICE_COORDS_URL: http://service-coords:5001
+      SERVICE_TILE_CUT_URL: http://service-tile-cut:5002
+      SERVICE_TILE_MERGE_URL: http://service-tile-merge:5003
+      SERVICE_TILE_COMPRESS_URL: http://service-tile-compress:5004
       BACKEND_INTERNAL_URL: http://backend:8002
+      MAP_TILES_MAX_X: 31
+      MAP_TILES_MAX_Y: 511
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
-      - ./volume-airflow-logs:/opt/airflow/logs
+      - airflow-logs:/opt/airflow/logs
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
+
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c "
+      airflow db migrate &&
+      airflow users create --username admin --password admin --role Admin --email admin@example.com --firstname Airflow --lastname Admin &&
+      tail -f /dev/null
+      "
 
   airflow-webserver:
     <<: *airflow-common
@@ -137,7 +152,7 @@ services:
     deploy:
       replicas: 2
 
-  airflow-worker-screenshot-cleanup:
+  airflow-worker-capture-cleanup:
     <<: *airflow-common
     command: celery worker -q screenshot_cleanup --concurrency 2
     deploy:
@@ -199,3 +214,7 @@ services:
     deploy:
       replicas: 2
     restart: unless-stopped
+
+volumes:
+  airflow-logs:
+    driver: local

@@ -93,7 +93,7 @@
   - service-tile-cut（GET - スクリーンショット, PUT - 未圧縮タイル）
   - service-tile-merge（GET - 未圧縮タイル, PUT - 未圧縮タイル）
   - service-tile-compress（GET - 未圧縮タイル, PUT - 圧縮タイル）
-  - airflow-worker-screenshot-cleanup（DELETE - スクリーンショット）
+  - airflow-worker-capture-cleanup（DELETE - スクリーンショット）
   - airflow-worker-tile-cleanup（DELETE - 未圧縮タイル）
   - backend（GET - 圧縮タイル配信）
 - **ポート**: `80`
@@ -328,7 +328,7 @@
   5. Backend の `/api/internal/tiles/{tile_id}` DELETE を呼び出し
   6. airflow DB でタスクを `success` 状態に更新
 
-#### airflow-worker-screenshot-cleanup
+#### airflow-worker-capture-cleanup
 - **役割**: スクリーンショット削除タスク実行ワーカー
 - **責務**:
   - `screenshot_cleanup` キューからタスク取得
@@ -817,7 +817,7 @@ Worker は以下を実行します:
 #### Step 9: スクリーンショット削除
 DAG設計では、各スクリーンショットを利用するすべてのタイル生成タスクとその子孫タスク（マージ、圧縮、削除すべて）が完了したとき、対応する削除タスク（`screenshot_cleanup_0`）が実行可能になります。
 
-`airflow-worker-screenshot-cleanup` は `screenshot_cleanup` キューからタスク（`"screenshot_cleanup_0"`）を取得します。
+`airflow-worker-capture-cleanup` は `screenshot_cleanup` キューからタスク（`"screenshot_cleanup_0"`）を取得します。
 
 Worker は以下を実行します:
 - airflow DBでタスクを `running` に更新
@@ -919,7 +919,7 @@ GET http://backend:8000/tiles/1/10/21.avif
 | airflow-worker-tile-merge | 2 | tile_merge キュー処理 |
 | airflow-worker-tile-compress | 2 | tile_compress キュー処理 |
 | airflow-worker-tile-cleanup | 2 | tile_cleanup キュー処理 |
-| airflow-worker-screenshot-cleanup | 2 | screenshot_cleanup キュー処理 |
+| airflow-worker-capture-cleanup | 2 | screenshot_cleanup キュー処理 |
 | service-capture | 2 | スクリーンショット撮影 |
 | service-coords | 2 | 座標推定 |
 | service-tile-cut | 2 | タイル切り出し |
