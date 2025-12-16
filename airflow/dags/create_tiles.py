@@ -4,8 +4,8 @@ from datetime import datetime
 import env
 from lib.capture_strategy import CaptureStrategy
 
-MAP_TILES_MAX_X = env.fetch('MAP_TILES_MAX_X', 512)
-MAP_TILES_MAX_Y = env.fetch('MAP_TILES_MAX_Y', 512)
+MAP_TILES_X = env.fetch('MAP_TILES_X', 512)
+MAP_TILES_Y = env.fetch('MAP_TILES_Y', 512)
 
 with DAG(
     dag_id='custom_dependencies',
@@ -15,7 +15,7 @@ with DAG(
 ) as dag:
 
     capture_strategy = CaptureStrategy(
-        map_x=MAP_TILES_MAX_X,
-        map_y=MAP_TILES_MAX_Y,
-        
+        map_x=MAP_TILES_X,
+        map_y=MAP_TILES_Y,
+
     )

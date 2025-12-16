@@ -74,8 +74,8 @@ services:
       SERVICE_TILE_MERGE_URL: http://service-tile-merge:5003
       SERVICE_TILE_COMPRESS_URL: http://service-tile-compress:5004
       BACKEND_INTERNAL_URL: http://backend:8002
-      MAP_TILES_MAX_X: 31
-      MAP_TILES_MAX_Y: 511
+      MAP_TILES_X: ${MAP_TILES_X}
+      MAP_TILES_Y: ${MAP_TILES_Y}
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
       - airflow-logs:/opt/airflow/logs
@@ -164,8 +164,19 @@ services:
     environment:
       STORAGE_URL: http://storage
       GAME_EXECUTABLE: simutrans-extended
-      PAKSET_NAME: Pak128.Britain-Ex
-      PAKSET_SIZE: 128
+      PAKSET_NAME: ${PAKSET_NAME}
+      PAKSET_SIZE: ${PAKSET_SIZE}
+      CAPTURE_SCREEN_WIDTH: ${CAPTURE_WIDTH}
+      CAPTURE_SCREEN_HEIGHT: ${CAPTURE_HEIGHT}
+      CAPTURE_CROP_WIDTH: ${IMAGE_WIDTH}
+      CAPTURE_CROP_HEIGHT: ${IMAGE_HEIGHT}
+      CAPTURE_CROP_OFFSET_X: ${CROP_OFFSET_X}
+      CAPTURE_CROP_OFFSET_Y: ${CROP_OFFSET_Y}
+      CAPTURE_TTL_SECONDS: 600
+      GAME_BOOT_TIMEOUT_SECONDS: 180
+      GAME_BOOT_POLL_INTERVAL_SECONDS: 1
+      GAME_BOOT_CHECK_X: 256
+      GAME_BOOT_CHECK_Y: 256
     volumes:
       - ./volume-storage:/data
       - ./volume-bin:/app/bin
@@ -178,6 +189,10 @@ services:
     build: ./service-coords
     environment:
       STORAGE_URL: http://storage
+      IMAGE_MARGIN_WIDTH: ${IMAGE_MARGIN_WIDTH}
+      IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
+      IMAGE_WIDTH: ${IMAGE_WIDTH}
+      IMAGE_HEIGHT: ${IMAGE_HEIGHT}
     volumes:
       - ./volume-storage:/data
     deploy:
@@ -188,6 +203,7 @@ services:
     build: ./service-tile-cut
     environment:
       STORAGE_URL: http://storage
+      TILE_SIZE: ${TILE_SIZE}
     volumes:
       - ./volume-storage:/data
     deploy:
@@ -198,6 +214,7 @@ services:
     build: ./service-tile-merge
     environment:
       STORAGE_URL: http://storage
+      TILE_SIZE: ${TILE_SIZE}
     volumes:
       - ./volume-storage:/data
     deploy:
@@ -208,7 +225,7 @@ services:
     build: ./service-tile-compress
     environment:
       STORAGE_URL: http://storage
-      AVIF_QUALITY: "30"
+      AVIF_QUALITY: ${TILE_QUALITY}
     volumes:
       - ./volume-storage:/data
     deploy:

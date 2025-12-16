@@ -22,11 +22,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # アプリケーションコードをコピー
 COPY app.py .
 
-ENV IMAGE_WIDTH=5632 \
-    IMAGE_HEIGHT=2816 \
-    IMAGE_MARGIN_WIDTH=256 \
-    IMAGE_MARGIN_HEIGHT=128
-
 EXPOSE 5001
 
 # gunicornで起動（2ワーカー、タイムアウト120秒）

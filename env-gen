@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OUT=".env"
+
+#---------------------------------------
+# 入力欄ここから
+#---------------------------------------
+
+# paksetについて
+PAKSET_NAME="Pak128.Britain-Ex"
+PAKSET_SIZE=128
+
+# マップの大きさについて
+MAP_TILES_X=31
+MAP_TILES_Y=511
+
+# 地図タイルについて
+TILE_SIZE=512
+TILE_QUALITY=30
+
+# スクショ撮影について
+DELTA=40
+CROP_OFFSET_Y=64   # メニューバー分
+
+#---------------------------------------
+# 入力欄ここまで
+#---------------------------------------
+
+# マウスカーソル待避のために1タイルの横幅分、
+# 2倍ズームに対応するため2倍
+CROP_OFFSET_X=$(( PAKSET_SIZE * 2 ))
+
+# 塗りしろは1タイル分、2倍ズームに対応するため2倍
+IMAGE_MARGIN_WIDTH=$(( PAKSET_SIZE * 2 ))
+
+# 縦方向は1/2倍されるので、2倍ズームと相殺して1倍になる
+IMAGE_MARGIN_HEIGHT=$(( PAKSET_SIZE ))
+
+IMAGE_WIDTH=$(( DELTA * PAKSET_SIZE + IMAGE_MARGIN_WIDTH * 2 ))
+IMAGE_HEIGHT=$(( DELTA * PAKSET_SIZE / 2 + IMAGE_MARGIN_HEIGHT * 2 ))
+
+CAPTURE_WIDTH=$(( IMAGE_WIDTH + CROP_OFFSET_X * 2 ))
+CAPTURE_HEIGHT=$(( IMAGE_HEIGHT + CROP_OFFSET_Y * 2 ))
+
+cat > "$OUT" <<EOF
+# サービスの設定
+
+# paksetについて
+PAKSET_NAME=$PAKSET_NAME
+PAKSET_SIZE=$PAKSET_SIZE
+
+# マップの大きさについて
+MAP_TILES_X=$MAP_TILES_X
+MAP_TILES_Y=$MAP_TILES_Y
+
+# 地図タイルについて
+TILE_SIZE=$TILE_SIZE
+TILE_QUALITY=$TILE_QUALITY
+
+# スクショ撮影について
+DELTA=$DELTA
+CROP_OFFSET_X=$CROP_OFFSET_X
+CROP_OFFSET_Y=$CROP_OFFSET_Y
+IMAGE_MARGIN_WIDTH=$IMAGE_MARGIN_WIDTH
+IMAGE_MARGIN_HEIGHT=$IMAGE_MARGIN_HEIGHT
+IMAGE_WIDTH=$IMAGE_WIDTH
+IMAGE_HEIGHT=$IMAGE_HEIGHT
+CAPTURE_WIDTH=$CAPTURE_WIDTH
+CAPTURE_HEIGHT=$CAPTURE_HEIGHT
+EOF
+
+echo "✔ .env generated ($OUT)"

@@ -15,7 +15,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # アプリケーションコードのコピー
 COPY app.py .
 
-ENV TILE_SIZE=512
 ENV PYTHONUNBUFFERED=1
 
 # ヘルスチェック

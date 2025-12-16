@@ -15,8 +15,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # アプリケーションコードのコピー
 COPY app.py .
 
-# タイルサイズを環境変数として設定（オーバーライド可能）
-ENV TILE_SIZE=512
 ENV PYTHONUNBUFFERED=1
 
 # ヘルスチェック
