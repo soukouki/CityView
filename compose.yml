@@ -74,8 +74,15 @@ services:
       SERVICE_TILE_MERGE_URL: http://service-tile-merge:5003
       SERVICE_TILE_COMPRESS_URL: http://service-tile-compress:5004
       BACKEND_INTERNAL_URL: http://backend:8002
+      PAKSET_SIZE: ${PAKSET_SIZE}
+      TILE_SIZE: ${TILE_SIZE}
+      DELTA: ${DELTA}
       MAP_TILES_X: ${MAP_TILES_X}
       MAP_TILES_Y: ${MAP_TILES_Y}
+      IMAGE_WIDTH: ${IMAGE_WIDTH}
+      IMAGE_HEIGHT: ${IMAGE_HEIGHT}
+      IMAGE_MARGIN_WIDTH: ${IMAGE_MARGIN_WIDTH}
+      IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
       - airflow-logs:/opt/airflow/logs

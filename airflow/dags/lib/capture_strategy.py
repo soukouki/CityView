@@ -24,8 +24,8 @@ class CaptureStrategy:
     
     def _left(self, x: int, y: int) -> Tuple[int, int]:
         """左側への移動（境界制限付き）"""
-        ideal_x = x - self.delta
-        ideal_y = y + self.delta
+        ideal_x = x - self.delta / 2
+        ideal_y = y + self.delta / 2
         
         if ideal_y > self.map_y:
             ideal_y = self.map_y
@@ -38,8 +38,8 @@ class CaptureStrategy:
     
     def _right(self, x: int, y: int) -> Tuple[int, int]:
         """右側への移動（境界制限付き）"""
-        ideal_x = x + self.delta
-        ideal_y = y - self.delta
+        ideal_x = x + self.delta / 2
+        ideal_y = y - self.delta / 2
         
         if ideal_y < 0:
             ideal_y = 0
@@ -52,8 +52,8 @@ class CaptureStrategy:
     
     def _down(self, x: int, y: int) -> Tuple[int, int]:
         """下側への移動（境界制限付き）"""
-        ideal_x = x + self.delta
-        ideal_y = y + self.delta
+        ideal_x = x + self.delta / 2
+        ideal_y = y + self.delta / 2
         
         if ideal_x > self.map_x:
             ideal_x = self.map_x

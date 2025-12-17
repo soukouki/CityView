@@ -15,7 +15,6 @@ app = Flask(__name__)
 STORAGE_URL = os.getenv('STORAGE_URL', 'http://storage')
 TILE_SIZE = int(os.getenv('TILE_SIZE', '512'))
 
-# 以下、画像処理関数とエンドポイントは変更なし
 def download_image(image_path: str) -> Image.Image:
     """storage から画像をダウンロードして PIL.Image オブジェクトを返す"""
     try:
@@ -50,9 +49,9 @@ def upload_tile(tile_path: str, image_data: bytes) -> None:
 @app.route('/cut', methods=['POST'])
 def cut_tile():
     """
-    タイル切り出しエンドポイント
-    リクエスト: {"images": [...], "tile_z": number, "tile_x": number, "tile_y": number}
-    レスポンス: {"tile_path": string}
+    画像切り出しエンドポイント
+    リクエスト: {"images": [...], "cut_area": {...}, "output_path": string}
+    レスポンス: {"output_path": string}
     """
     try:
         # リクエストパラメータの取得と検証
@@ -61,23 +60,29 @@ def cut_tile():
             return jsonify({"error": "Invalid JSON payload"}), 400
         
         images = data.get('images', [])
-        tile_z = data.get('tile_z')
-        tile_x = data.get('tile_x')
-        tile_y = data.get('tile_y')
+        cut_area = data.get('cut_area')
+        output_path = data.get('output_path')
         
-        if not all([images, tile_z is not None, tile_x is not None, tile_y is not None]):
+        if not all([images, cut_area, output_path]):
             return jsonify({"error": "Missing required parameters"}), 400
         
         if not isinstance(images, list) or len(images) == 0:
             return jsonify({"error": "images must be a non-empty list"}), 400
         
-        # タイルのピクセル範囲を計算
-        tile_left = tile_x * TILE_SIZE
-        tile_top = tile_y * TILE_SIZE
+        # cut_area の検証
+        cut_x = cut_area.get('x')
+        cut_y = cut_area.get('y')
+        
+        if cut_x is None or cut_y is None:
+            return jsonify({"error": "cut_area must contain 'x' and 'y'"}), 400
+        
+        # 切り出し範囲の計算（固定サイズ: TILE_SIZE x TILE_SIZE）
+        tile_left = cut_x
+        tile_top = cut_y
         tile_right = tile_left + TILE_SIZE
         tile_bottom = tile_top + TILE_SIZE
         
-        logger.info(f"タイル切り出し開始: z={tile_z}, x={tile_x}, y={tile_y}, 範囲=({tile_left},{tile_top})-({tile_right},{tile_bottom})")
+        logger.info(f"画像切り出し開始: 範囲=({tile_left},{tile_top})-({tile_right},{tile_bottom}), 出力先={output_path}")
         
         # 透明なタイル画像を作成
         tile_image = Image.new('RGBA', (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
@@ -100,7 +105,7 @@ def cut_tile():
                 img = download_image(img_path)
                 img_width, img_height = img.size
                 
-                # 画像のピクセル範囲
+                # 画像のピクセル範囲（スクショ座標系）
                 img_left = img_x
                 img_top = img_y
                 img_right = img_left + img_width
@@ -112,19 +117,19 @@ def cut_tile():
                     img.close()
                     continue  # オーバーラップなし
                 
-                # オーバーラップ領域の計算（画像座標系）
+                # オーバーラップ領域の計算（スクショ座標系）
                 overlap_left = max(img_left, tile_left)
                 overlap_top = max(img_top, tile_top)
                 overlap_right = min(img_right, tile_right)
                 overlap_bottom = min(img_bottom, tile_bottom)
                 
-                # 画像内の切り出し矩形
+                # 画像内の切り出し矩形（画像内座標系）
                 crop_left = overlap_left - img_left
                 crop_top = overlap_top - img_top
                 crop_right = overlap_right - img_left
                 crop_bottom = overlap_bottom - img_top
                 
-                # タイル内の貼り付け位置
+                # タイル内の貼り付け位置（タイル内座標系）
                 paste_left = overlap_left - tile_left
                 paste_top = overlap_top - tile_top
                 
@@ -133,6 +138,7 @@ def cut_tile():
                 tile_image.paste(overlap_img, (paste_left, paste_top))
                 
                 img.close()
+                overlap_img.close()
                 processed_images += 1
                 
             except Exception as e:
@@ -143,19 +149,18 @@ def cut_tile():
         
         # PNG形式でエンコード（未圧縮）
         output_buffer = io.BytesIO()
-        tile_image.save(output_buffer, format='PNG', compress_level=0)  # compress_level=0 で無圧縮
+        tile_image.save(output_buffer, format='PNG', compress_level=0)
         tile_image.close()
         output_buffer.seek(0)
         tile_data = output_buffer.getvalue()
         
         # storageに保存
-        tile_path = f"/images/rawtiles/{tile_z}/{tile_x}/{tile_y}.png"
-        upload_tile(tile_path, tile_data)
+        upload_tile(output_path, tile_data)
         
-        return jsonify({"tile_path": tile_path})
+        return jsonify({"output_path": output_path})
         
     except Exception as e:
-        logger.error(f"タイル切り出し処理で予期しないエラー: {str(e)}", exc_info=True)
+        logger.error(f"画像切り出し処理で予期しないエラー: {str(e)}", exc_info=True)
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 @app.route('/health', methods=['GET'])

@@ -414,13 +414,13 @@
   - `STORAGE_URL`: 画像取得元の base URL
 
 #### service-tile-cut
-- **役割**: 最大ズームタイル切り出しサービス（Python + Flask + Pillow）
+- **役割**: 画像切り出しサービス（Python + Flask + Pillow）
 - **責務**:
   - storage から複数のスクリーンショットを取得
-  - 座標情報を元に画像を結合
-  - 指定範囲を切り出し
+  - 座標情報を元に仮想キャンバス上に配置
+  - 指定ピクセル範囲を切り出し
   - 未圧縮PNG形式で storage へ保存
-  - タイルパスを返却
+  - 保存パスを返却
 - **DB接続**: なし
 - **呼び出し先**:
   - storage: 画像取得（GET）、タイル保存（PUT）
@@ -428,44 +428,90 @@
 
   | メソッド | パス | 説明 | リクエスト | レスポンス |
   |---|---|---|---|---|
-  | POST | `/cut` | タイル切り出し | `{"images": [{"id": "string", "path": "string", "x": number, "y": number}], "tile_x": number, "tile_y": number}` | `{"tile_path": "string"}` |
+  | POST | `/cut` | 画像切り出し | 下記参照 | `{"output_path": "string"}` |
+
+- **リクエストボディ**:
+  ```json
+  {
+    "images": [
+      {
+        "path": "string",      // storage上のパス
+        "x": number,           // スクショ座標X
+        "y": number            // スクショ座標Y
+      }
+    ],
+    "cut_area": {
+      "x": number,             // 切り出し開始X（スクショ座標）
+      "y": number,             // 切り出し開始Y（スクショ座標）
+    },
+    "output_path": "string"    // 保存先パス（例: "/images/rawtiles/18/10/20.png"）
+  }
+  ```
+
+- **レスポンス**:
+  ```json
+  {
+    "output_path": "string",   // 保存されたパス
+  }
+  ```
 
 - **レプリカ数**: `2`
 - **処理フロー**:
   1. リクエスト受信
   2. 複数画像を storage から取得
-  3. 仮想キャンバスに配置
-  4. タイル範囲を切り出し
-  5. 未圧縮PNG形式で storage の `/images/rawtiles/{z}/{x}/{y}.png` に保存
+  3. 仮想キャンバスに配置（各画像を指定座標に配置）
+  4. `cut_area` で指定された範囲を切り出し
+  5. 未圧縮PNG形式で `output_path` に保存
   6. メモリ解放
-  7. タイルパスを返却
+  7. 保存パスと実際のサイズを返却
 - **ポート**: `5002`
 
 #### service-tile-merge
-- **役割**: タイルマージサービス（Python + Flask + Pillow）
+- **役割**: 画像マージ・リサイズサービス（Python + Flask + Pillow）
 - **責務**:
-  - storage から4枚の子タイルを取得
-  - 2x2で結合し、1/2にリサイズ
+  - storage から4枚の画像を取得
+  - 指定レイアウトで結合
+  - 指定サイズにリサイズ
   - 未圧縮PNG形式で storage へ保存
-  - タイルパスを返却
+  - 保存パスを返却
 - **DB接続**: なし
 - **呼び出し先**:
-  - storage: タイル取得（GET）、タイル保存（PUT）
+  - storage: 画像取得（GET）、画像保存（PUT）
 - **エンドポイント**:
 
   | メソッド | パス | 説明 | リクエスト | レスポンス |
   |---|---|---|---|---|
-  | POST | `/merge` | タイルマージ | `{"child_tiles": [{"path": "string"}], "parent_z": number, "parent_x": number, "parent_y": number}` | `{"tile_path": "string"}` |
+  | POST | `/merge` | 画像マージ | 下記参照 | `{"output_path": "string"}` |
+
+- **リクエストボディ**:
+  ```json
+  {
+    "tiles": [
+      {
+        "path": "string",      // storage上のパス
+        "position": "string"   // "top-left" | "top-right" | "bottom-left" | "bottom-right"
+      }
+    ],
+    "output_path": "string"    // 保存先パス（例: "/images/rawtiles/17/10/20.png"）
+  }
+  ```
+
+- **レスポンス**:
+  ```json
+  {
+    "output_path": "string",   // 保存されたパス
+  }
+  ```
 
 - **レプリカ数**: `2`
 - **処理フロー**:
   1. リクエスト受信
-  2. 4枚の子タイル画像を storage から取得
-  3. 2x2の配置で結合（2 * tile_size の正方形画像）
-  4. 1/2にリサイズ（tile_size の正方形画像）
-  5. 未圧縮PNG形式で storage の `/images/tiles/raw/{z}/{x}/{y}.png` に保存
+  2. 4枚の画像を storage から取得
+  3. 2x2の配置で結合（各タイルを指定位置に配置）
+  4. `output_size` にリサイズ
+  5. 未圧縮PNG形式で `output_path` に保存
   6. メモリ解放
-  7. タイルパスを返却
+  7. 保存パスと実際のサイズを返却
 - **ポート**: `5003`
 
 #### service-tile-compress
@@ -656,61 +702,29 @@ Worker は以下を実行します:
 - Backendは `screenshots` テーブルの該当レコードに推定座標を更新
 - airflow DBでタスクを `success` に更新
 
-#### Step 5: 最大ズームタイル切り出し
-あるタイル（例: `tile_cut_18_10_20`）に必要なすべてのcoords完了（例: `coords_0_0`, `coords_10_10`）後、`tile_cut_18_10_20` が実行可能になります。
-
-`airflow-worker-tile-cut` は `tile_cut` キューからタスク（`"tile_cut_18_10_20"`）を取得します。
-
+### Step 5: 最大ズームタイル切り出し
 Worker は以下を実行します:
 - airflow DBでタスクを `running` に更新
 - DAGの設定からこのタイルが必要とするエリアID（例: `area_id: 0, 1, 128, 129`）を取得
-- XComから各エリアのcapture・coords結果を取得し、以下のような `images` リストを構築:
-  ```json
-  [
-    {
-      "id": "shot_abc123",
-      "path": "/images/screenshots/shot_abc123.png",
-      "x": 1024,
-      "y": 2048
-    }
-  ]
-  ```
+- XComから各エリアのcapture・coords結果を取得し、`images` リストを構築
+- **座標変換を実施**: タイル座標 `(z=18, tx=10, ty=20)` からスクショ座標の切り出し範囲を計算
 - `service-tile-cut` を呼び出し: `POST http://service-tile-cut:5002/cut`
   ```json
   {
-    "images": [...],
-    "tile_z": 18,
-    "tile_x": 10,
-    "tile_y": 20,
-  }
-  ```
-
-`service-tile-cut` は以下を実行します:
-- storageから複数の画像を取得
-- 仮想キャンバス上に座標に基づいて配置
-- タイル範囲（`z=18`, `x=10`, `y=20`, `size=512`）を切り出し
-- 未圧縮PNG形式で storageへ `PUT /images/rawtiles/18/10/20.png` で保存
-- `{"tile_path": "/images/rawtiles/18/10/20.png"}` を返却
-
-Worker は以下を実行します:
-- レスポンスを受け取り、airflow DBのXComに保存
-- Backend の `POST /api/internal/tiles` を呼び出し:
-  ```json
-  {
-    "job_id": 123,
-    "tiles": [
+    "images": [
       {
-        "z": 18,
-        "x": 10,
-        "y": 20,
-        "filepath": "/images/rawtiles/18/10/20.png",
-        "source_type": "screenshot"
+        "path": "/images/screenshots/shot_abc123.png",
+        "x": 1024,
+        "y": 2048
       }
-    ]
+    ],
+    "cut_area": {
+      "x": -5120,
+      "y": 10240
+    },
+    "output_path": "/images/rawtiles/18/10/20.png"
   }
   ```
-- Backendは `tiles` テーブルにレコード挿入（`compressed=false`, `source_type='screenshot'`）
-- airflow DBでタスクを `success` に更新
 
 #### Step 6: 最大ズームタイル圧縮
 `tile_cut_18_10_20` タスクが完了すると `tile_compress_18_10_20` が実行可能になります。
@@ -747,59 +761,47 @@ Worker は以下を実行します:
 - Backendは `tiles` テーブルの該当レコードを更新（`compressed=true`, `filepath` を圧縮版に更新）
 - airflow DBでタスクを `success` に更新
 
-#### Step 7: ズームアウトタイルマージ
-4枚の子タイル（例: `tile_compress_18_20_40`, `tile_compress_18_21_40`, `tile_compress_18_20_41`, `tile_compress_18_21_41`）が完了すると、`tile_merge_17_10_20` が実行可能になります。
-
-`airflow-worker-tile-merge` は `tile_merge` キューからタスク（`"tile_merge_17_10_20"`）を取得します。
+### Step 7: ズームアウトタイルマージ（修正版）
 
 Worker は以下を実行します:
 - airflow DBでタスクを `running` に更新
 - XComから4枚の子タイルの情報を取得
+- **子タイルのパスを特定**: タイル座標 `(z=17, tx=10, ty=20)` の子タイルは以下
+  ```python
+  child_z = 18
+  child_tiles = [
+      (child_z, tx * 2, ty * 2),        # 左上
+      (child_z, tx * 2 + 1, ty * 2),    # 右上
+      (child_z, tx * 2, ty * 2 + 1),    # 左下
+      (child_z, tx * 2 + 1, ty * 2 + 1) # 右下
+  ]
+  # 各子タイルのパスを構築
+  # "/images/rawtiles/18/20/40.png" など
+  ```
 - `service-tile-merge` を呼び出し: `POST http://service-tile-merge:5003/merge`
   ```json
   {
-    "child_tiles": [
-      {"path": "/images/rawtiles/18/20/40.png"},
-      {"path": "/images/rawtiles/18/21/40.png"},
-      {"path": "/images/rawtiles/18/20/41.png"},
-      {"path": "/images/rawtiles/18/21/41.png"}
-    ],
-    "parent_z": 17,
-    "parent_x": 10,
-    "parent_y": 20
-  }
-  ```
-
-`service-tile-merge` は以下を実行します:
-- storageから4枚の子タイルを取得
-- 2x2で結合（1024x1024）
-- 1/2にリサイズ（512x512）
-- 未圧縮PNG形式で storageへ `PUT /images/rawtiles/17/10/20.png` で保存
-- `{"tile_path": "/images/rawtiles/17/10/20.png"}` を返却
-
-Worker は以下を実行します:
-- レスポンスを受け取り、airflow DBのXComに保存
-- Backend の `POST /api/internal/tiles` を呼び出し:
-  ```json
-  {
-    "job_id": 123,
     "tiles": [
       {
-        "z": 17,
-        "x": 10,
-        "y": 20,
-        "filepath": "/images/rawtiles/17/10/20.png",
-        "source_type": "merged"
+        "path": "/images/rawtiles/18/20/40.png",
+        "position": "top-left"
+      },
+      {
+        "path": "/images/rawtiles/18/21/40.png",
+        "position": "top-right"
+      },
+      {
+        "path": "/images/rawtiles/18/20/41.png",
+        "position": "bottom-left"
+      },
+      {
+        "path": "/images/rawtiles/18/21/41.png",
+        "position": "bottom-right"
       }
-    ]
+    ],
+    "output_path": "/images/rawtiles/17/10/20.png"
   }
   ```
-- Backendは `tiles` テーブルにレコード挿入（`compressed=false`, `source_type='merged'`）
-- airflow DBでタスクを `success` に更新
-
-その後、`tile_compress_17_10_20` が実行され、Step 6と同様の処理で圧縮されます。
-
-この処理がズームレベル0まで繰り返されます。
 
 #### Step 8: 未圧縮タイル削除
 `tile_compress_18_10_20` タスクが完了し、このタイルを必要とする他のタスク（この場合は `tile_merge_17_5_10`）も完了すると、`tile_cleanup_18_10_20` が実行可能になります。

@@ -13,7 +13,7 @@ app = Flask(__name__)
 
 # 環境変数から設定を読み込み
 STORAGE_URL = os.getenv('STORAGE_URL', 'http://storage')
-TILE_SIZE = int(os.getenv('TILE_SIZE', '512'))  # タイルサイズを環境変数から取得
+TILE_SIZE = int(os.getenv('TILE_SIZE', '512'))
 
 def download_tile(tile_path: str) -> Image.Image:
     """storage からタイルをダウンロードして PIL.Image オブジェクトを返す"""
@@ -49,9 +49,9 @@ def upload_tile(tile_path: str, image_data: bytes) -> None:
 @app.route('/merge', methods=['POST'])
 def merge_tiles():
     """
-    タイルマージエンドポイント
-    リクエスト: {"child_tiles": [{"path": "string"}], "parent_z": number, "parent_x": number, "parent_y": number}
-    レスポンス: {"tile_path": "string"}
+    画像マージエンドポイント
+    リクエスト: {"tiles": [{"path": "string", "position": "string"}], "output_path": "string"}
+    レスポンス: {"output_path": "string"}
     """
     try:
         # リクエストパラメータの取得と検証
@@ -59,66 +59,82 @@ def merge_tiles():
         if not data:
             return jsonify({"error": "Invalid JSON payload"}), 400
         
-        child_tiles = data.get('child_tiles', [])
-        parent_z = data.get('parent_z')
-        parent_x = data.get('parent_x')
-        parent_y = data.get('parent_y')
+        tiles = data.get('tiles', [])
+        output_path = data.get('output_path')
         
-        if not all([child_tiles, parent_z is not None, parent_x is not None, parent_y is not None]):
+        if not all([tiles, output_path]):
             return jsonify({"error": "Missing required parameters"}), 400
         
-        if not isinstance(child_tiles, list) or len(child_tiles) != 4:
-            return jsonify({"error": "child_tiles must be exactly 4 items"}), 400
+        if not isinstance(tiles, list) or len(tiles) != 4:
+            return jsonify({"error": "tiles must be exactly 4 items"}), 400
         
-        logger.info(f"タイルマージ開始: parent_z={parent_z}, parent_x={parent_x}, parent_y={parent_y}, tile_size={TILE_SIZE}")
+        logger.info(f"画像マージ開始: tile_count={len(tiles)}, tile_size={TILE_SIZE}, output={output_path}")
         
-        # 子タイルをダウンロード（2x2の順序で）
-        child_images = []
-        for i, child_info in enumerate(child_tiles):
-            try:
-                path = child_info.get('path')
-                if not path:
-                    return jsonify({"error": f"child_tiles[{i}] missing path"}), 400
-                
-                img = download_tile(path)
-                child_images.append(img)
-                
-            except Exception as e:
-                logger.error(f"子タイル{i}のダウンロードに失敗: {str(e)}")
-                # すでに読み込んだ画像をクローズ
-                for img in child_images:
-                    img.close()
-                raise
+        # position文字列からタイル配置座標へのマッピング
+        position_map = {
+            'top-left': (0, 0),
+            'top-right': (TILE_SIZE, 0),
+            'bottom-left': (0, TILE_SIZE),
+            'bottom-right': (TILE_SIZE, TILE_SIZE)
+        }
         
-        # 2x2配置で結合（2 * TILE_SIZE の正方形画像）
+        # 2x2配置用の結合画像を作成（2 * TILE_SIZE の正方形）
         merged_width = TILE_SIZE * 2
         merged_height = TILE_SIZE * 2
         merged_image = Image.new('RGBA', (merged_width, merged_height), (0, 0, 0, 0))
         
-        # 子タイルを配置（左上、右上、左下、右下）
-        positions = [(0, 0), (TILE_SIZE, 0), (0, TILE_SIZE), (TILE_SIZE, TILE_SIZE)]
-        for img, (x, y) in zip(child_images, positions):
-            merged_image.paste(img, (x, y))
+        # 各タイルをダウンロードして配置
+        loaded_images = []
+        for i, tile_info in enumerate(tiles):
+            try:
+                path = tile_info.get('path')
+                position = tile_info.get('position')
+                
+                if not path or not position:
+                    return jsonify({"error": f"tiles[{i}] missing 'path' or 'position'"}), 400
+                
+                if position not in position_map:
+                    return jsonify({"error": f"tiles[{i}] invalid position: {position}"}), 400
+                
+                # タイルをダウンロード
+                img = download_tile(path)
+                loaded_images.append(img)
+                
+                # 指定位置に配置
+                x, y = position_map[position]
+                merged_image.paste(img, (x, y))
+                
+                logger.info(f"タイル配置完了: {position} at ({x}, {y})")
+                
+            except Exception as e:
+                logger.error(f"タイル{i}の処理に失敗: {str(e)}")
+                # すでに読み込んだ画像をクローズ
+                for img in loaded_images:
+                    img.close()
+                raise
+        
+        # 読み込んだ画像をクローズ
+        for img in loaded_images:
             img.close()
         
-        # 1/2にリサイズ（TILE_SIZE の正方形画像）
-        merged_image = merged_image.resize((TILE_SIZE, TILE_SIZE), Image.Resampling.LANCZOS)
+        # 1/2にリサイズ（TILE_SIZE x TILE_SIZE）
+        resized_image = merged_image.resize((TILE_SIZE, TILE_SIZE), Image.Resampling.LANCZOS)
+        merged_image.close()
         
         # PNG形式でエンコード（未圧縮）
         output_buffer = io.BytesIO()
-        merged_image.save(output_buffer, format='PNG', compress_level=0)  # compress_level=0 で無圧縮
-        merged_image.close()
+        resized_image.save(output_buffer, format='PNG', compress_level=0)
+        resized_image.close()
         output_buffer.seek(0)
         tile_data = output_buffer.getvalue()
         
-        # storageに保存（設計書通りのパス）
-        tile_path = f"/images/rawtiles/{parent_z}/{parent_x}/{parent_y}.png"
-        upload_tile(tile_path, tile_data)
+        # storageに保存
+        upload_tile(output_path, tile_data)
         
-        return jsonify({"tile_path": tile_path})
+        return jsonify({"output_path": output_path})
         
     except Exception as e:
-        logger.error(f"タイルマージ処理で予期しないエラー: {str(e)}", exc_info=True)
+        logger.error(f"画像マージ処理で予期しないエラー: {str(e)}", exc_info=True)
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 @app.route('/health', methods=['GET'])
