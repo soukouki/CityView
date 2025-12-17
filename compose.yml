@@ -69,7 +69,7 @@ services:
       AIRFLOW__CORE__EXECUTOR: CeleryExecutor
       AIRFLOW__API__AUTH_BACKEND: airflow.api.auth.backend.default
       SERVICE_CAPTURE_URL: http://service-capture:5000
-      SERVICE_COORDS_URL: http://service-estimate:5001
+      SERVICE_ESTIMATE_URL: http://service-estimate:5001
       SERVICE_TILE_CUT_URL: http://service-tile-cut:5002
       SERVICE_TILE_MERGE_URL: http://service-tile-merge:5003
       SERVICE_TILE_COMPRESS_URL: http://service-tile-compress:5004
@@ -83,6 +83,7 @@ services:
       IMAGE_HEIGHT: ${IMAGE_HEIGHT}
       IMAGE_MARGIN_WIDTH: ${IMAGE_MARGIN_WIDTH}
       IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
+      TZ: ${TZ}
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
       - airflow-logs:/opt/airflow/logs

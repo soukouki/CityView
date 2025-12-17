@@ -1,6 +1,14 @@
 import os
 
-# 環境変数から取ってくる
+# サービスのURL設定
+SERVICE_CAPTURE_URL = os.environ.get('SERVICE_CAPTURE_URL', 'http://service-capture:5000')
+SERVICE_ESTIMATE_URL = os.environ.get('SERVICE_ESTIMATE_URL', 'http://service-estimate:5001')
+SERVICE_TILE_CUT_URL = os.environ.get('SERVICE_TILE_CUT_URL', 'http://service-tile-cut:5002')
+SERVICE_TILE_MERGE_URL = os.environ.get('SERVICE_TILE_MERGE_URL', 'http://service-tile-merge:5003')
+SERVICE_TILE_COMPRESS_URL = os.environ.get('SERVICE_TILE_COMPRESS_URL', 'http://service-tile-compress:5004')
+BACKEND_INTERNAL_URL = os.environ.get('BACKEND_INTERNAL_URL', 'http://backend:8002')
+
+# 環境変数からの設定
 PAKSET_SIZE = int(os.environ.get('PAKSET_SIZE', '128'))
 TILE_SIZE = int(os.environ.get('TILE_SIZE', '512'))
 DELTA = int(os.environ.get('DELTA', '40'))

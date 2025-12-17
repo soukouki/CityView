@@ -63,8 +63,12 @@ def cut_tile():
         cut_area = data.get('cut_area')
         output_path = data.get('output_path')
         
-        if not all([images, cut_area, output_path]):
-            return jsonify({"error": "Missing required parameters"}), 400
+        if images is None:
+            return jsonify({"error": "images parameter is required"}), 400
+        if cut_area is None:
+            return jsonify({"error": "cut_area parameter is required"}), 400
+        if output_path is None:
+            return jsonify({"error": "output_path parameter is required"}), 400
         
         if not isinstance(images, list) or len(images) == 0:
             return jsonify({"error": "images must be a non-empty list"}), 400

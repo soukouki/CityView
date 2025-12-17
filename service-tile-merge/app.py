@@ -62,11 +62,10 @@ def merge_tiles():
         tiles = data.get('tiles', [])
         output_path = data.get('output_path')
         
-        if not all([tiles, output_path]):
-            return jsonify({"error": "Missing required parameters"}), 400
-        
-        if not isinstance(tiles, list) or len(tiles) != 4:
-            return jsonify({"error": "tiles must be exactly 4 items"}), 400
+        if tiles is None:
+            return jsonify({"error": "tiles parameter is required"}), 400
+        if output_path is None:
+            return jsonify({"error": "output_path parameter is required"}), 400
         
         logger.info(f"画像マージ開始: tile_count={len(tiles)}, tile_size={TILE_SIZE}, output={output_path}")
         

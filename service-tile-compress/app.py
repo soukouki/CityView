@@ -64,8 +64,12 @@ def compress_tile():
         x = data.get('x')
         y = data.get('y')
         
-        if not all([z is not None, x is not None, y is not None]):
-            return jsonify({"error": "Missing required parameters"}), 400
+        if z is None:
+            return jsonify({"error": "z parameter is required"}), 400
+        if x is None:
+            return jsonify({"error": "x parameter is required"}), 400
+        if y is None:
+            return jsonify({"error": "y parameter is required"}), 400
         
         # パスを自動構築
         raw_tile_path = f"/images/rawtiles/{z}/{x}/{y}.png"

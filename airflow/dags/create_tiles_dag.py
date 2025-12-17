@@ -32,6 +32,7 @@ with DAG(
     dag_id='create_tiles',
     catchup=False,
     start_date=datetime(2024, 1, 1),
+    schedule=None,
     params={
         "save_data_name": "demo",
     },
@@ -65,7 +66,7 @@ with DAG(
     for area in areas:
         task_id = f"estimate_x{area['x']}_y{area['y']}"
         hint_coord = game_tile_to_screen_coord(area['x'], area['y'])
-        estimate_tasks[task_id] = estimate.override(task_id=task_id, queue="coords")(
+        estimate_tasks[task_id] = estimate.override(task_id=task_id, queue="estimate")(
             image_path=capture_tasks[f"capture_x{area['x']}_y{area['y']}"],
             adjacent_images=[
                 {

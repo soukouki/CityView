@@ -7,6 +7,8 @@ OUT=".env"
 # 入力欄ここから
 #---------------------------------------
 
+TZ="Asia/Tokyo"
+
 # paksetについて
 PAKSET_NAME="Pak128.Britain-Ex"
 PAKSET_SIZE=128
@@ -45,6 +47,8 @@ CAPTURE_HEIGHT=$(( IMAGE_HEIGHT + CROP_OFFSET_Y * 2 ))
 
 cat > "$OUT" <<EOF
 # サービスの設定
+
+TZ=$TZ
 
 # paksetについて
 PAKSET_NAME=$PAKSET_NAME
