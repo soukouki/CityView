@@ -1,8 +1,3 @@
-"""
-撮影戦略のPython移植版
-Rubyコードのロジックを忠実に再現
-"""
-
 from typing import List, Dict, Tuple
 
 class CaptureStrategy:

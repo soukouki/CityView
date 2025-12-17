@@ -47,7 +47,7 @@
 - **役割**: メッセージブローカー
 - **責務**:
   - Celery（Airflow Worker）のタスクキュー管理
-  - キュー: `capture`, `coords`, `tile_cut`, `tile_merge`, `tile_compress`, `tile_cleanup`, `screenshot_cleanup`
+  - キュー: `capture`, `estimate`, `tile_cut`, `tile_merge`, `tile_compress`, `tile_cleanup`, `screenshot_cleanup`
 - **接続元**:
   - airflow-scheduler（タスク投入）
   - airflow-worker-*（タスク取得）
@@ -89,7 +89,7 @@
 
 - **接続元**:
   - service-capture（PUT - スクリーンショット）
-  - service-coords（GET - スクリーンショット）
+  - service-estimate（GET - スクリーンショット）
   - service-tile-cut（GET - スクリーンショット, PUT - 未圧縮タイル）
   - service-tile-merge（GET - 未圧縮タイル, PUT - 未圧縮タイル）
   - service-tile-compress（GET - 未圧縮タイル, PUT - 圧縮タイル）
@@ -210,26 +210,26 @@
   5. Backend の `/api/internal/screenshots` を呼び出して結果を永続化
   6. airflow DB でタスクを `success` 状態に更新
 
-#### airflow-worker-coords
+#### airflow-worker-estimate
 - **役割**: 座標推定タスク実行ワーカー
 - **責務**:
-  - `coords` キューからタスク取得
+  - `estimate` キューからタスク取得
   - 前タスクの結果を XCom から取得
-  - `service-coords` サービス呼び出し
+  - `service-estimate` サービス呼び出し
   - Backend API を通じて結果を `gamedb` に永続化
   - タスク状態更新
 - **DB接続**:
   - `airflow`: 読み書き（タスク状態、XCom）
 - **呼び出し先**:
   - redis: タスク取得
-  - service-coords: 座標推定依頼
+  - service-estimate: 座標推定依頼
   - backend: 結果の永続化
 - **レプリカ数**: `2`
 - **処理フロー**:
   1. Redis からタスク取得
   2. airflow DB でタスクを `running` 状態に更新
   3. airflow DB の XCom から前タスク結果取得
-  4. `service-coords` を呼び出し
+  4. `service-estimate` を呼び出し
   5. レスポンスを airflow DB の XCom に保存
   6. Backend の `/api/internal/screenshots/{id}` を呼び出して推定座標を更新
   7. airflow DB でタスクを `success` 状態に更新
@@ -381,7 +381,7 @@
   - TTLは10分。
 - **ポート**: `5000`
 
-#### service-coords
+#### service-estimate
 - **役割**: 座標推定サービス（Python + Flask + OpenCV）
 - **責務**:
   - storage から画像取得
@@ -567,7 +567,7 @@
 
 ```text
 capture_{i}
-  >> coords_{i}
+  >> estimate_{i}
   >> tile_cut_{z_max}_{x}_{y}  (最大ズームタイル切り出し)
   >> [
        tile_compress_{z_max}_{x}_{y}  (最大ズームタイル圧縮)
@@ -614,7 +614,7 @@ Backendはクライアントに以下を返します:
 Airflow Schedulerはdag_runを検知し、DAG定義ファイルを読み込みます。パラメータから撮影エリア数（例: 10,000）、ズームレベル範囲（例: z_max=18, z_min=0）、タイル依存関係を取得し、以下のタスクを動的に生成します:
 
 - `capture_*_*`（スクリーンショット撮影）
-- `coords_*_*`（座標推定）
+- `estimate_*_*`（座標推定）
 - `tile_cut_18_*_*`（最大ズームタイル切り出し、数十万個）
 - `tile_compress_18_*_*`（最大ズームタイル圧縮）
 - `tile_cleanup_18_*_*`（未圧縮タイル削除）
@@ -664,15 +664,15 @@ Worker は以下を実行します:
 - airflow DBでタスクを `success` に更新
 
 #### Step 4: 座標推定
-`capture_0` タスクが完了すると `coords_0` が実行可能になります。
+`capture_0` タスクが完了すると `estimate_0` が実行可能になります。
 
-`airflow-worker-coords` は `coords` キューからタスク（`"coords_0"`）を取得します。
+`airflow-worker-estimate` は `estimate` キューからタスク（`"estimate_0"`）を取得します。
 
 Worker は以下を実行します:
 - airflow DBでタスクを `running` に更新
 - XComから `capture_0` の結果を取得（`{"image_path": "/images/screenshots/shot_abc123.png"}`）
 - DAGの設定から期待座標（ヒント）と隣接画像を取得
-- `service-coords` を呼び出し: `POST http://service-coords:5001/estimate`
+- `service-estimate` を呼び出し: `POST http://service-estimate:5001/estimate`
   ```json
   {
     "image_path": "/images/screenshots/shot_abc123.png",
@@ -684,7 +684,7 @@ Worker は以下を実行します:
   }
   ```
 
-`service-coords` は以下を実行します:
+`service-estimate` は以下を実行します:
 - storageから主画像と隣接画像を取得
 - 画像解析（テンプレートマッチング、特徴点検出）を実行
 - ヒント座標も考慮した座標推定
@@ -706,7 +706,7 @@ Worker は以下を実行します:
 Worker は以下を実行します:
 - airflow DBでタスクを `running` に更新
 - DAGの設定からこのタイルが必要とするエリアID（例: `area_id: 0, 1, 128, 129`）を取得
-- XComから各エリアのcapture・coords結果を取得し、`images` リストを構築
+- XComから各エリアのcapture・estimate結果を取得し、`images` リストを構築
 - **座標変換を実施**: タイル座標 `(z=18, tx=10, ty=20)` からスクショ座標の切り出し範囲を計算
 - `service-tile-cut` を呼び出し: `POST http://service-tile-cut:5002/cut`
   ```json
@@ -916,14 +916,14 @@ GET http://backend:8000/tiles/1/10/21.avif
 | コンポーネント | レプリカ数 | キュー/役割 |
 |---|---:|---|
 | airflow-worker-capture | 2 | capture キュー処理 |
-| airflow-worker-coords | 2 | coords キュー処理 |
+| airflow-worker-estimate | 2 | estimate キュー処理 |
 | airflow-worker-tile-cut | 2 | tile_cut キュー処理 |
 | airflow-worker-tile-merge | 2 | tile_merge キュー処理 |
 | airflow-worker-tile-compress | 2 | tile_compress キュー処理 |
 | airflow-worker-tile-cleanup | 2 | tile_cleanup キュー処理 |
 | airflow-worker-capture-cleanup | 2 | screenshot_cleanup キュー処理 |
 | service-capture | 2 | スクリーンショット撮影 |
-| service-coords | 2 | 座標推定 |
+| service-estimate | 2 | 座標推定 |
 | service-tile-cut | 2 | タイル切り出し |
 | service-tile-merge | 2 | タイルマージ |
 | service-tile-compress | 2 | タイル圧縮 |

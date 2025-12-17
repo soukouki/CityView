@@ -1,51 +1,32 @@
 from airflow import DAG
-from airflow.decorators import task
 from datetime import datetime
-from lib.capture_strategy import CaptureStrategy
-import os
 import math
 from collections import defaultdict
-
-# 環境変数から取ってくる
-PAKSET_SIZE = int(os.environ.get('PAKSET_SIZE', '128'))
-TILE_SIZE = int(os.environ.get('TILE_SIZE', '512'))
-DELTA = int(os.environ.get('DELTA', '40'))
-MAP_TILES_X = int(os.environ.get('MAP_TILES_X', '512'))
-MAP_TILES_Y = int(os.environ.get('MAP_TILES_Y', '512'))
-IMAGE_WIDTH = int(os.environ.get('IMAGE_WIDTH', '5632')) # W + 2w
-IMAGE_HEIGHT = int(os.environ.get('IMAGE_HEIGHT', '2816')) # H + 2h
-IMAGE_MARGIN_WIDTH = int(os.environ.get('IMAGE_MARGIN_WIDTH', '256'))
-IMAGE_MARGIN_HEIGHT = int(os.environ.get('IMAGE_MARGIN_HEIGHT', '128'))
-ENABLE_WIDTH = IMAGE_WIDTH - 2 * IMAGE_MARGIN_WIDTH
-ENABLE_HEIGHT = IMAGE_HEIGHT - 2 * IMAGE_MARGIN_HEIGHT
-
-# タイルグループ化のサイズ
-TILE_GROUP_SIZE = 16
-
-# ゲーム内タイル座標系とスクショ座標系の変換式
-def game_tile_to_screen_coord(tile_x: int, tile_y: int) -> tuple[int, int]:
-    screen_x = 256 * (tile_x - tile_y) + (ENABLE_WIDTH // 2) + IMAGE_MARGIN_WIDTH
-    screen_y = 128 * (tile_x + tile_y) + (ENABLE_HEIGHT // 2) + IMAGE_MARGIN_HEIGHT
-    return screen_x, screen_y
-
-def screen_coord_to_game_tile(screen_x: int, screen_y: int) -> tuple[int, int]:
-    X = screen_x - IMAGE_MARGIN_WIDTH
-    Y = screen_y - IMAGE_MARGIN_HEIGHT
-    tile_x = (X + 2 * Y) // 512
-    tile_y = (2 * Y - X) // 512
-    return tile_x, tile_y
-
-def screen_coord_to_map_tile(screen_x: int, screen_y: int, z: int, z_max: int, y_max: int) -> tuple[int, int]:
-    scale = 2 ** (z_max - z)
-    tile_x = (screen_x + 256 * y_max + IMAGE_MARGIN_WIDTH * 2) // (512 * scale)
-    tile_y = screen_y // (512 * scale)
-    return tile_x, tile_y
-
-def map_tile_to_screen_coord(tile_x: int, tile_y: int, z: int, z_max: int, y_max: int) -> tuple[int, int]:
-    scale = 2 ** (z_max - z)
-    screen_x_min = tile_x * 512 * scale - 256 * y_max - IMAGE_MARGIN_WIDTH * 2
-    screen_y_min = tile_y * 512 * scale
-    return screen_x_min, screen_y_min
+from create_tiles.capture_strategy import CaptureStrategy
+from create_tiles.config import (
+    PAKSET_SIZE,
+    TILE_SIZE,
+    DELTA,
+    MAP_TILES_X,
+    MAP_TILES_Y,
+    IMAGE_WIDTH,
+    IMAGE_HEIGHT,
+    IMAGE_MARGIN_WIDTH,
+    IMAGE_MARGIN_HEIGHT,
+    ENABLE_WIDTH,
+    ENABLE_HEIGHT,
+    TILE_GROUP_SIZE,
+)
+from create_tiles.utils import (
+    game_tile_to_screen_coord,
+    screen_coord_to_map_tile,
+    map_tile_to_screen_coord,
+)
+from create_tiles.tasks.capture import capture
+from create_tiles.tasks.estimate import estimate
+from create_tiles.tasks.tile_cut_g import tile_cut_g
+from create_tiles.tasks.tile_merge_g import tile_merge_g
+from create_tiles.tasks.tile_compress_g import tile_compress_g
 
 with DAG(
     dag_id='create_tiles',
@@ -62,19 +43,14 @@ with DAG(
         delta=DELTA,
     )
     areas = strategy.generate_capture_areas()
+    save_data_name = dag.params["save_data_name"]
 
     # ---------- スクショ撮影タスク ----------
-
-    @task
-    def capture(save_data_name: str, x: int, y: int):
-        print(f"Capturing area {save_data_name} at ({x}, {y})")
-        return f"/images/screenshots/{save_data_name}_x{x}_y{y}.png"
-
     capture_tasks = {}
     for area in areas:
         task_id = f"capture_x{area['x']}_y{area['y']}"
         capture_tasks[task_id] = capture.override(task_id=task_id, queue="capture")(
-            save_data_name=dag.params["save_data_name"],
+            save_data_name=save_data_name,
             x=area['x'],
             y=area['y'],
         )
@@ -85,14 +61,6 @@ with DAG(
     print(f"Total capture tasks: {len(capture_tasks)}")
 
     # ---------- スクショ座標推定タスク ----------
-
-    @task
-    def estimate(image_path: str, adjacent_images: list, hint_x: int, hint_y: int):
-        print(f"Estimating coords for {image_path} with hints ({hint_x}, {hint_y})")
-        for adj in adjacent_images:
-            print(f"Using adjacent image {adj['image_path']} at offset ({adj['x']}, {adj['y']})")
-        return {"x": hint_x + 1, "y": hint_y + 1}
-
     estimate_tasks = {}
     for area in areas:
         task_id = f"estimate_x{area['x']}_y{area['y']}"
@@ -118,16 +86,6 @@ with DAG(
 
     # ---------- 最大ズームタイル切り出しタスク ----------
     # タイル数が多いので、TILE_GROUP_SIZE x TILE_GROUP_SIZEごとにまとめて処理する
-
-    @task
-    def tile_cut_g(tasks: list):
-        print(f"Processing tile cut group with {len(tasks)} tasks")
-        for task in tasks:
-            print(f"Cutting tile at ({task['x']}, {task['y']}) into {task['output_path']} using {len(task['images'])} images")
-            for img in task['images']:
-                print(f" - Using image {img['path']} with coords {img['coords']}")
-        return True
-
     max_width = 256 * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_WIDTH * 4
     max_height = 128 * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_HEIGHT * 2
     max_z = math.ceil(math.log2(max(max_width, max_height) / TILE_SIZE))
@@ -165,8 +123,8 @@ with DAG(
         
         # 変換後のタイル座標の最小値と最大値を取得して、正確なタイル範囲を計算
         tile_x_min = min(p[0] for p in corners_in_tile_coords)
-        tile_y_min = min(p[1] for p in corners_in_tile_coords)
         tile_x_max = max(p[0] for p in corners_in_tile_coords)
+        tile_y_min = min(p[1] for p in corners_in_tile_coords)
         tile_y_max = max(p[1] for p in corners_in_tile_coords)
         
         area_coverage.append({
@@ -250,16 +208,6 @@ with DAG(
     print(f"Total tile cut group tasks: {len(tile_cut_tasks)}")
 
     # ---------- タイルマージタスク ----------
-
-    @task
-    def tile_merge_g(tasks: list):
-        print(f"Merging tile group with {len(tasks)} tasks")
-        for task in tasks:
-            print(f"Merging tiles into {task['output_path']} using {len(task['tiles'])} tiles")
-            for tile in task['tiles']:
-                print(f" - Using tile {tile['path']} at position {tile['position']}")
-        return True
-
     tile_merge_tasks = {}
     for z in range(max_z - 1, 0, -1):
         tiles_per_axis = 2 ** max_z
@@ -319,14 +267,6 @@ with DAG(
     print(f"Total tile merge tasks: {len(tile_merge_tasks)}")
 
     # ---------- タイル圧縮タスク ----------
-    
-    @task
-    def tile_compress_g(tasks: list):
-        print(f"Compressing tile group with {len(tasks)} tasks")
-        for task in tasks:
-            print(f"Compressing tile at {task['input_path']} into {task['output_path']}")
-        return True
-
     tile_compress_tasks = {}
     # tile_cutタスクに対応する圧縮タスクを作成
     for task_id, _ in tile_cut_tasks.items():
@@ -352,6 +292,7 @@ with DAG(
         )
         # 依存関係の設定
         tile_cut_tasks[task_id] >> tile_compress_tasks[compress_task_id]
+    
     # tile_mergeタスクに対応する圧縮タスクを作成
     for task_id, _ in tile_merge_tasks.items():
         parts = task_id.split('_') # 例: tile_merge_g_z{z}_gx{gx}_gy{gy}
