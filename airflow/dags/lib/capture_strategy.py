@@ -19,13 +19,26 @@ class CaptureStrategy:
             self._generate_x_ge_y(screenshots)
         else:
             self._generate_x_lt_y(screenshots)
+
+        screenshots = self._remove_duplicates(screenshots)
         
         return screenshots
+
+    # 重複を削除
+    def _remove_duplicates(self, screenshots: List[Dict]) -> List[Dict]:
+        seen = set()
+        unique_screenshots = []
+        for shot in screenshots:
+            identifier = (shot['x'], shot['y'])
+            if identifier not in seen:
+                seen.add(identifier)
+                unique_screenshots.append(shot)
+        return unique_screenshots
     
     def _left(self, x: int, y: int) -> Tuple[int, int]:
         """左側への移動（境界制限付き）"""
-        ideal_x = x - self.delta / 2
-        ideal_y = y + self.delta / 2
+        ideal_x = x - self.delta // 2
+        ideal_y = y + self.delta // 2
         
         if ideal_y > self.map_y:
             ideal_y = self.map_y
@@ -38,8 +51,8 @@ class CaptureStrategy:
     
     def _right(self, x: int, y: int) -> Tuple[int, int]:
         """右側への移動（境界制限付き）"""
-        ideal_x = x + self.delta / 2
-        ideal_y = y - self.delta / 2
+        ideal_x = x + self.delta // 2
+        ideal_y = y - self.delta // 2
         
         if ideal_y < 0:
             ideal_y = 0
@@ -52,8 +65,8 @@ class CaptureStrategy:
     
     def _down(self, x: int, y: int) -> Tuple[int, int]:
         """下側への移動（境界制限付き）"""
-        ideal_x = x + self.delta / 2
-        ideal_y = y + self.delta / 2
+        ideal_x = x + self.delta // 2
+        ideal_y = y + self.delta // 2
         
         if ideal_x > self.map_x:
             ideal_x = self.map_x

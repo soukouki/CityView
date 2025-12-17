@@ -59,7 +59,7 @@ with DAG(
     strategy = CaptureStrategy(
         map_x=MAP_TILES_X,
         map_y=MAP_TILES_Y,
-        delta=256,
+        delta=DELTA,
     )
     areas = strategy.generate_capture_areas()
 
@@ -81,6 +81,8 @@ with DAG(
         compare_task_names = [f"capture_x{comp['x']}_y{comp['y']}" for comp in area['compare']]
         for compare_task_name in compare_task_names:
             capture_tasks[compare_task_name] >> capture_tasks[task_id]
+    
+    print(f"Total capture tasks: {len(capture_tasks)}")
 
     # ---------- スクショ座標推定タスク ----------
 
@@ -112,20 +114,19 @@ with DAG(
         for comp in area['compare']:
             estimate_tasks[f"estimate_x{comp['x']}_y{comp['y']}"] >> estimate_tasks[task_id]
 
+    print(f"Total estimate tasks: {len(estimate_tasks)}")
+
     # ---------- 最大ズームタイル切り出しタスク ----------
+    # タイル数が多いので、TILE_GROUP_SIZE x TILE_GROUP_SIZEごとにまとめて処理する
 
     @task
-    def tile_cut_group(tiles_info: list, output_dir: str):
-        """複数タイルをグループでまとめて処理"""
-        print(f"Cutting {len(tiles_info)} tiles in group to {output_dir}")
-        for tile_info in tiles_info:
-            print(f"Tile ({tile_info['x']}, {tile_info['y']}): {len(tile_info['images'])} images")
-            for img in tile_info['images']:
-                # 実行時にcoordsから取り出す
-                actual_x = img['coords']['x']
-                actual_y = img['coords']['y']
-                print(f"  Using image {img['path']} at ({actual_x}, {actual_y})")
-        return output_dir
+    def tile_cut_g(tasks: list):
+        print(f"Processing tile cut group with {len(tasks)} tasks")
+        for task in tasks:
+            print(f"Cutting tile at ({task['x']}, {task['y']}) into {task['output_path']} using {len(task['images'])} images")
+            for img in task['images']:
+                print(f" - Using image {img['path']} with coords {img['coords']}")
+        return True
 
     max_width = 256 * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_WIDTH * 4
     max_height = 128 * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_HEIGHT * 2
@@ -148,13 +149,25 @@ with DAG(
         capture_x_max = screen_x + (IMAGE_WIDTH // 2)
         capture_y_max = screen_y + (IMAGE_HEIGHT // 2)
         
-        # タイル座標系に変換して空間インデックスを作成
-        tile_x_min, tile_y_min = screen_coord_to_map_tile(
-            capture_x_min, capture_y_min, max_z, max_z, MAP_TILES_Y
-        )
-        tile_x_max, tile_y_max = screen_coord_to_map_tile(
-            capture_x_max, capture_y_max, max_z, max_z, MAP_TILES_Y
-        )
+        # スクショの4つの角のスクショ座標系での位置を計算
+        corners_in_screen_coords = [
+            (capture_x_min, capture_y_min),  # 左上
+            (capture_x_max, capture_y_min),  # 右上
+            (capture_x_min, capture_y_max),  # 左下
+            (capture_x_max, capture_y_max),  # 右下
+        ]
+
+        # 4つの角をすべてタイル座標に変換
+        corners_in_tile_coords = [
+            screen_coord_to_map_tile(sx, sy, max_z, max_z, MAP_TILES_Y)
+            for sx, sy in corners_in_screen_coords
+        ]
+        
+        # 変換後のタイル座標の最小値と最大値を取得して、正確なタイル範囲を計算
+        tile_x_min = min(p[0] for p in corners_in_tile_coords)
+        tile_y_min = min(p[1] for p in corners_in_tile_coords)
+        tile_x_max = max(p[0] for p in corners_in_tile_coords)
+        tile_y_max = max(p[1] for p in corners_in_tile_coords)
         
         area_coverage.append({
             'area': area,
@@ -178,11 +191,11 @@ with DAG(
 
     # グループ化してタイル切り出しタスクを生成
     tile_cut_tasks = {}
+    tiles = {} # 後のタイルマージ用に記録しておく
     for gx in range(0, total_tiles_per_axis, actual_group_size):
         for gy in range(0, total_tiles_per_axis, actual_group_size):
             # グループ内の全タイル情報を収集
-            tiles_in_group = []
-            group_has_images = False  # このグループに画像が1つでもあるか
+            tasks_in_group = []
             
             for tx in range(gx, min(gx + actual_group_size, total_tiles_per_axis)):
                 for ty in range(gy, min(gy + actual_group_size, total_tiles_per_axis)):
@@ -214,25 +227,84 @@ with DAG(
                             "path": capture_tasks[f"capture_x{img['x']}_y{img['y']}"],
                             "coords": coords,  # ← estimate結果全体を渡す
                         })
-                    
-                    # 画像があるかチェック
+
+                    # 元画像がない場合はマップ範囲外なのでスキップ
                     if len(images) > 0:
-                        group_has_images = True
-                    
-                    tiles_in_group.append({
-                        "x": tx,
-                        "y": ty,
-                        "images": images,
-                    })
+                        tasks_in_group.append({
+                            "x": tx,
+                            "y": ty,
+                            "images": images,
+                            "output_path": f"/images/rawtiles/{max_z}/{tx}/{ty}.png",
+                        })
+                        tiles[(max_z, tx, ty)] = True
             
             # 画像が1つもない(=完全にマップ外)グループはタスクを作らない
-            if not group_has_images:
+            if len(tasks_in_group) == 0:
                 continue
             
-            task_id = f"tile_cut_group_z{max_z}_gx{gx}_gy{gy}"
-            tile_cut_tasks[task_id] = tile_cut_group.override(task_id=task_id, queue="tile_cut")(
-                tiles_info=tiles_in_group,
-                output_dir=f"/images/rawtiles/{max_z}/group_{gx}_{gy}",
+            task_id = f"tile_cut_g_z{max_z}_gx{gx}_gy{gy}"
+            tile_cut_tasks[task_id] = tile_cut_g.override(task_id=task_id, queue="tile_cut")(
+                tasks=tasks_in_group,
             )
 
-    # ---------- 低ズームタイル生成タスク ----------
+    print(f"Total tile cut group tasks: {len(tile_cut_tasks)}")
+
+    # ---------- タイルマージタスク ----------
+
+    @task
+    def tile_merge_g(tasks: list):
+        print(f"Merging tile group with {len(tasks)} tasks")
+        for task in tasks:
+            print(f"Merging tiles into {task['output_path']} using {len(task['tiles'])} tiles")
+            for tile in task['tiles']:
+                print(f" - Using tile {tile['path']} at position {tile['position']}")
+        return True
+
+    tile_merge_tasks = {}
+    for z in range(max_z - 1, 0, -1):
+        tiles_per_axis = 2 ** z
+        group_size = min(TILE_GROUP_SIZE, tiles_per_axis)
+        
+        for gx in range(0, tiles_per_axis, group_size):
+            for gy in range(0, tiles_per_axis, group_size):
+                tasks_in_group = []
+                group_has_tiles = False
+                for tx in range(gx, min(gx + group_size, tiles_per_axis), 2):
+                    for ty in range(gy, min(gy + group_size, tiles_per_axis), 2):
+                        merge_tiles = []
+                        positions = ["top-left", "top-right", "bottom-left", "bottom-right"]
+                        
+                        for dx in range(2):
+                            for dy in range(2):
+                                child_x = tx * 2 + dx
+                                child_y = ty * 2 + dy
+                                # 子タイルが存在するか確認し、1つでもあればマージタスクに追加
+                                if (z + 1, child_x, child_y) in tiles:
+                                    merge_tiles.append({
+                                        "path": f"/images/rawtiles/{z+1}/{child_x}/{child_y}.png",
+                                        "position": positions[dx * 2 + dy],
+                                    })
+                        
+                        if len(merge_tiles) == 0:
+                            continue # 子タイルが1つもない場合はスキップ
+                        tasks_in_group.append({
+                            "tiles": merge_tiles,
+                            "output_path": f"/images/rawtiles/{z-1}/{tx//2}/{ty//2}.png",
+                        })
+                        tiles[(z, tx // 2, ty // 2)] = True
+                if len(tasks_in_group) == 0:
+                    continue # グループ内にタスクがない場合はスキップ
+                task_id = f"tile_merge_g_z{z}_gx{gx}_gy{gy}"
+                tile_merge_tasks[task_id] = tile_merge_g.override(task_id=task_id, queue="tile_merge")(
+                    tasks=tasks_in_group,
+                )
+    
+    # 依存関係の設定
+    # TODO
+
+    for z in range(max_z - 1, 0, -1):
+        print(f"Total tile merge group tasks at z={z}: {len(tile_merge_tasks)}")
+
+    print(f"Total tile merge tasks: {len(tile_merge_tasks)}")
+
+    # ---------- タイル圧縮タスク ----------
