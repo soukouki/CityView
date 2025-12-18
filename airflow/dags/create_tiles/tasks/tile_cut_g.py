@@ -20,8 +20,8 @@ def tile_cut(x: int, y: int, images: list, output_path: str):
         "images": [
             {
                 "path": img["path"],
-                "x": img["coords"][0], # coords is a tuple (x, y)
-                "y": img["coords"][1],
+                "x": img["coords"]["x"], # coords is {"x": int, "y": int}
+                "y": img["coords"]["y"],
             } for img in images
         ],
         "cut_area": {

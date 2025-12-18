@@ -366,7 +366,7 @@
 
   | メソッド | パス | 説明 | リクエスト | レスポンス |
   |---|---|---|---|---|
-  | POST | `/capture` | スクリーンショット撮影 | `{"save_data_name": "string", "x": 0, "y": 0}` | `{"image_path": "string"}` |
+  | POST | `/capture` | スクリーンショット撮影 | `{"save_data_name": "string", "x": 0, "y": 0, "output_path": "string"}` | `{"status": "ok"}` |
 
 - **レプリカ数**: `2`
 - **処理フロー**:
@@ -638,7 +638,8 @@ Worker は以下を実行します:
   {
     "save_data_name": "save_demo",
     "x": 0,
-    "y": 0
+    "y": 0,
+    "output_path": "/images/screenshots/shot_abc123.png"
   }
   ```
 
@@ -664,13 +665,11 @@ Worker は以下を実行します:
 - airflow DBでタスクを `success` に更新
 
 #### Step 4: 座標推定
-`capture_0` タスクが完了すると `estimate_0` が実行可能になります。
-
 `airflow-worker-estimate` は `estimate` キューからタスク（`"estimate_0"`）を取得します。
 
 Worker は以下を実行します:
 - airflow DBでタスクを `running` に更新
-- XComから `capture_0` の結果を取得（`{"image_path": "/images/screenshots/shot_abc123.png"}`）
+- XComから、該当スクリーンショットの情報と、隣接エリアのスクリーンショット情報を取得
 - DAGの設定から期待座標（ヒント）と隣接画像を取得
 - `service-estimate` を呼び出し: `POST http://service-estimate:5001/estimate`
   ```json

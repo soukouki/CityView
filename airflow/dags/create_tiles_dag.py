@@ -50,10 +50,15 @@ with DAG(
     capture_tasks = {}
     for area in areas:
         task_id = f"capture_x{area['x']}_y{area['y']}"
-        capture_tasks[task_id] = capture.override(task_id=task_id, queue="capture")(
+        capture_tasks[task_id] = capture.override(
+            task_id=task_id,
+            queue="capture",
+            priority_weight=area['priority'],
+        )(
             save_data_name=save_data_name,
             x=area['x'],
             y=area['y'],
+            output_path=f"/images/screenshots/{save_data_name}/x{area['x']}_y{area['y']}.png",
         )
         compare_task_names = [f"capture_x{comp['x']}_y{comp['y']}" for comp in area['compare']]
     # 撮影には依存関係は不要
@@ -67,13 +72,15 @@ with DAG(
         hint_coord = game_tile_to_screen_lefttop_coord(area['x'], area['y'])
         adjustment_images = []
         for comp in area['compare']:
-            coord = game_tile_to_screen_lefttop_coord(comp['x'], comp['y'])
             adjustment_images.append({
                 "image_path": capture_tasks[f"capture_x{comp['x']}_y{comp['y']}"],
-                "x": coord[0],
-                "y": coord[1],
+                "coords": estimate_tasks[f"estimate_x{comp['x']}_y{comp['y']}"],
             })
-        estimate_tasks[task_id] = estimate.override(task_id=task_id, queue="estimate")(
+        estimate_tasks[task_id] = estimate.override(
+            task_id=task_id,
+            queue="estimate",
+            priority_weight=area['priority'],
+        )(
             image_path=capture_tasks[f"capture_x{area['x']}_y{area['y']}"],
             adjacent_images=adjustment_images,
             hint_x=hint_coord[0],

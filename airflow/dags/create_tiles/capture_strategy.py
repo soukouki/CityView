@@ -1,5 +1,7 @@
 from typing import List, Dict, Tuple
 
+PRIORITY_CONSTANT = 10000 # 適当な大きい数値
+
 class CaptureStrategy:
     def __init__(self, map_x: int, map_y: int, delta: int):
         self.map_x = map_x
@@ -78,41 +80,48 @@ class CaptureStrategy:
         screenshots.append({
             'area_id': 0,
             'x': current_x, 'y': current_y,
-            'compare': []
+            'compare': [],
+            'priority': PRIORITY_CONSTANT * 4,
         })
         
         flag1 = []
         area_id = 1
         
         # PHASE 1: ジグザグ走査
+        priority = PRIORITY_CONSTANT * 3
         while True:
             # 下に移動
             new_x, new_y = self._down(current_x, current_y)
             screenshots.append({
                 'area_id': area_id,
                 'x': new_x, 'y': new_y,
-                'compare': [{'x': current_x, 'y': current_y}]
+                'compare': [{'x': current_x, 'y': current_y}],
+                'priority': priority,
             })
             area_id += 1
             current_x, current_y = new_x, new_y
             flag1.append({'x': current_x, 'y': current_y})
             if current_y == self.map_y:
                 break
+            priority -= 1
             
             # 右に移動
             new_x, new_y = self._right(current_x, current_y)
             screenshots.append({
                 'area_id': area_id,
                 'x': new_x, 'y': new_y,
-                'compare': [{'x': current_x, 'y': current_y}]
+                'compare': [{'x': current_x, 'y': current_y}],
+                'priority': priority,
             })
             area_id += 1
             current_x, current_y = new_x, new_y
             if current_x == self.map_x:
                 break
+            priority -= 1
         
         # PHASE 2: 左方向への走査
         for start_point in flag1:
+            priority = PRIORITY_CONSTANT if start_point == flag1[-1] else PRIORITY_CONSTANT * 2 # 最後の行は優先度高め
             current_x, current_y = start_point['x'], start_point['y']
             while True:
                 new_x, new_y = self._left(current_x, current_y)
@@ -121,10 +130,12 @@ class CaptureStrategy:
                 screenshots.append({
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
-                    'compare': [{'x': current_x, 'y': current_y}]
+                    'compare': [{'x': current_x, 'y': current_y}],
+                    'priority': priority,
                 })
                 area_id += 1
                 current_x, current_y = new_x, new_y
+                priority -= 1
         
         # PHASE 3: 下方向への走査
         last_line = flag1[-1]
@@ -138,6 +149,7 @@ class CaptureStrategy:
             current_x, current_y = new_x, new_y
         
         for start_point in start_points:
+            priority = PRIORITY_CONSTANT
             current_x, current_y = start_point['x'], start_point['y']
             while True:
                 new_x, new_y = self._down(current_x, current_y)
@@ -146,10 +158,12 @@ class CaptureStrategy:
                 screenshots.append({
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
-                    'compare': [{'x': current_x, 'y': current_y}]
+                    'compare': [{'x': current_x, 'y': current_y}],
+                    'priority': priority,
                 })
                 area_id += 1
                 current_x, current_y = new_x, new_y
+                priority -= 1
     
     def _generate_x_lt_y(self, screenshots: List[Dict]):
         """map_x < map_yの場合の生成ロジック"""
@@ -157,41 +171,48 @@ class CaptureStrategy:
         screenshots.append({
             'area_id': 0,
             'x': current_x, 'y': current_y,
-            'compare': []
+            'compare': [],
+            'priority': PRIORITY_CONSTANT * 4,
         })
         
         flag1 = []
         area_id = 1
         
         # PHASE 1: ジグザグ走査（左方向）
+        privacy = PRIORITY_CONSTANT * 3
         while True:
             # 下に移動
             new_x, new_y = self._down(current_x, current_y)
             screenshots.append({
                 'area_id': area_id,
                 'x': new_x, 'y': new_y,
-                'compare': [{'x': current_x, 'y': current_y}]
+                'compare': [{'x': current_x, 'y': current_y}],
+                'priority': privacy,
             })
             area_id += 1
             current_x, current_y = new_x, new_y
             flag1.append({'x': current_x, 'y': current_y})
             if current_y == self.map_y:
                 break
+            privacy -= 1
             
             # 左に移動
             new_x, new_y = self._left(current_x, current_y)
             screenshots.append({
                 'area_id': area_id,
                 'x': new_x, 'y': new_y,
-                'compare': [{'x': current_x, 'y': current_y}]
+                'compare': [{'x': current_x, 'y': current_y}],
+                'priority': privacy,
             })
             area_id += 1
             current_x, current_y = new_x, new_y
             if current_x == self.map_x:
                 break
+            privacy -= 1
         
         # PHASE 2: 右方向への走査
         for start_point in flag1:
+            priority = PRIORITY_CONSTANT if start_point == flag1[-1] else PRIORITY_CONSTANT * 2 # 最後の行は優先度高め
             current_x, current_y = start_point['x'], start_point['y']
             while True:
                 new_x, new_y = self._right(current_x, current_y)
@@ -200,10 +221,12 @@ class CaptureStrategy:
                 screenshots.append({
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
-                    'compare': [{'x': current_x, 'y': current_y}]
+                    'compare': [{'x': current_x, 'y': current_y}],
+                    'priority': priority,
                 })
                 area_id += 1
                 current_x, current_y = new_x, new_y
+                priority -= 1
         
         # PHASE 3: 下方向への走査
         last_line = flag1[-1]
@@ -217,6 +240,7 @@ class CaptureStrategy:
             current_x, current_y = new_x, new_y
         
         for start_point in start_points:
+            priority = PRIORITY_CONSTANT
             current_x, current_y = start_point['x'], start_point['y']
             while True:
                 new_x, new_y = self._down(current_x, current_y)
@@ -225,7 +249,9 @@ class CaptureStrategy:
                 screenshots.append({
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
-                    'compare': [{'x': current_x, 'y': current_y}]
+                    'compare': [{'x': current_x, 'y': current_y}],
+                    'priority': priority,
                 })
                 area_id += 1
                 current_x, current_y = new_x, new_y
+                priority -= 1

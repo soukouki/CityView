@@ -9,8 +9,8 @@ module ServiceCapture
       @base_url = base_url.sub(%r{/\z}, "")
     end
 
-    def put_file!(remote_path:, local_path:)
-      url = "#{@base_url}#{remote_path}"
+    def put_file!(output_path:, local_path:)
+      url = "#{@base_url}#{output_path}"
       body = File.binread(local_path)
 
       res = HTTParty.put(

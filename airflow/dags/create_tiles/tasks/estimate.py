@@ -6,12 +6,21 @@ from create_tiles.config import SERVICE_ESTIMATE_URL
 def estimate(image_path: str, adjacent_images: list, hint_x: int, hint_y: int):
     print(f"Estimating coords for {image_path} with hints ({hint_x}, {hint_y})")
     for adj in adjacent_images:
-        print(f"Using adjacent image {adj['image_path']} at offset ({adj['x']}, {adj['y']})")
+        print(f"Using adjacent image {adj['image_path']} at offset ({adj['coords']['x']}, {adj['coords']['y']})")
     
+    adjustment_images_info = [
+        {
+            "image_path": adj["image_path"],
+            "x": adj["coords"]["x"],
+            "y": adj["coords"]["y"]
+        }
+        for adj in adjacent_images
+    ]
+
     url = f"{SERVICE_ESTIMATE_URL}/estimate"
     payload = {
         "image_path": image_path,
-        "adjacent_images": adjacent_images,
+        "adjacent_images": adjustment_images_info,
         "hint_x": hint_x,
         "hint_y": hint_y
     }
@@ -24,4 +33,4 @@ def estimate(image_path: str, adjacent_images: list, hint_x: int, hint_y: int):
     estimated_x = data["estimated_x"]
     estimated_y = data["estimated_y"]
     print(f"Estimated coords: ({estimated_x}, {estimated_y})")
-    return estimated_x, estimated_y
+    return {"x": estimated_x, "y": estimated_y}

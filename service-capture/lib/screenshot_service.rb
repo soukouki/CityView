@@ -19,19 +19,10 @@ module ServiceCapture
       FileUtils.mkdir_p("/tmp/service-capture")
     end
 
-    def self.build_screenshot_id(save_data_name:, x:, y:, container_hint:, random:)
-      # requirements:
-      # - include save_data_name, x, y
-      # - include container id OR random (we include both when available)
-      # - safe characters for URL paths
-      save = normalize_component(save_data_name)
-      cont = normalize_component(container_hint.to_s)
-      "shot_#{save}_x#{x}_y#{y}_#{cont}_#{random}"
-    end
-
-    def capture!(screenshot_id:, x:, y:)
-      raw_path = "/tmp/service-capture/#{screenshot_id}_raw.png"
-      cropped_path = "/tmp/service-capture/#{screenshot_id}.png"
+    def capture!(output_path:, x:, y:)
+      screenshot_id = "#{self.class.normalize_component(output_path.split("/").last)}_#{Time.now.strftime("%Y%m%d%H%M%S")}_#{rand(1000)}"
+      raw_path = "/tmp/service-capture/#{screenshot_id}_raw}.png"
+      cropped_path = "/tmp/service-capture/#{screenshot_id}_cropped.png"
 
       # Move, hide cursor, wait a little for redraw, then screenshot.
       puts "Taking a screenshot at x=#{x}, y=#{y}"
@@ -58,12 +49,11 @@ module ServiceCapture
 
       puts "Took a screenshot"
 
-      remote_path = "/images/screenshots/#{screenshot_id}.png"
-      @storage.put_file!(remote_path:, local_path: cropped_path)
+      @storage.put_file!(output_path:, local_path: cropped_path)
 
-      puts "Saved a screenshot for #{remote_path}"
+      puts "Saved a screenshot for #{output_path}"
 
-      remote_path
+      output_path
     ensure
       FileUtils.rm_f(raw_path) if defined?(raw_path)
       FileUtils.rm_f(cropped_path) if defined?(cropped_path)

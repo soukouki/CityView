@@ -91,15 +91,28 @@ module ServiceCapture
     end
 
     # POST /capture
-    # request: { "save_data_name": "...", "x": 0, "y": 0 }
-    # response: { "image_path": "/images/screenshots/{id}.png", "screenshot_id": "{id}" }
+    # request: { "save_data_name": "...", "x": 0, "y": 0, "output_path": "..." }
+    # response: { "status": "ok" }
     post "/capture" do
       payload = parse_json_body!
       require_fields!(payload, :save_data_name, :x, :y)
 
       save_data_name = payload["save_data_name"].to_s
+      if save_data_name.empty?
+        halt 400, json(error: "invalid_save_data_name", message: "save_data_name cannot be empty")
+      end
       x = Integer(payload["x"])
+      if x < 0
+        halt 400, json(error: "invalid_x", message: "x must be non-negative")
+      end
       y = Integer(payload["y"])
+      if y < 0
+        halt 400, json(error: "invalid_y", message: "y must be non-negative")
+      end
+      output_path = payload["output_path"].to_s
+      if output_path.empty?
+        halt 400, json(error: "invalid_output_path", message: "output_path cannot be empty")
+      end
 
       # Only one capture at a time per container.
       result = nil
@@ -107,23 +120,14 @@ module ServiceCapture
         # Ensure game process for this save is running (restart if save differs).
         GAME_MANAGER.ensure_running(save_data_name)
 
-        # Generate screenshot id with save/x/y + container hint + random.
-        screenshot_id = ServiceCapture::ScreenshotService.build_screenshot_id(
-          save_data_name:,
-          x:,
-          y:,
-          container_hint: ENV["HOSTNAME"],
-          random: SecureRandom.alphanumeric(8)
-        )
-
         image_path = SCREENSHOT.capture!(
-          screenshot_id:,
+          output_path:,
           x:,
           y:
         )
 
         GAME_MANAGER.touch
-        result = { screenshot_id:, image_path: }
+        result = { status: "success" }
       end
 
       json(result)
