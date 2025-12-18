@@ -98,9 +98,9 @@ def estimate_with_sift(target_img, ref_img, ref_x, ref_y):
         median_translation = np.median(translations, axis=0)
         
         # 推定座標を計算
-        estimated_x = (ref_x - median_translation[0]) * 8
+        estimated_x = ref_x + median_translation[0] * 8
         # CV座標系ではy軸が上向きだが、スクショ座標系では下向き
-        estimated_y = (median_translation[1] - ref_y) * 8
+        estimated_y = ref_y + median_translation[1] * 8
         
         print(f"SIFT matching succeeded: estimated ({int(estimated_x)}, {int(estimated_y)})", flush=True)
         return int(estimated_x), int(estimated_y)

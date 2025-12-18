@@ -4,8 +4,6 @@ import math
 from collections import defaultdict
 from create_tiles.capture_strategy import CaptureStrategy
 from create_tiles.config import (
-    PAKSET_SIZE,
-    TILE_SIZE,
     DELTA,
     MAP_TILES_X,
     MAP_TILES_Y,
@@ -16,9 +14,11 @@ from create_tiles.config import (
     ENABLE_WIDTH,
     ENABLE_HEIGHT,
     TILE_GROUP_SIZE,
+    MAX_Z,
 )
 from create_tiles.utils import (
     game_tile_to_screen_coord,
+    game_tile_to_screen_lefttop_coord,
     screen_coord_to_map_tile,
     map_tile_to_screen_coord,
 )
@@ -56,8 +56,7 @@ with DAG(
             y=area['y'],
         )
         compare_task_names = [f"capture_x{comp['x']}_y{comp['y']}" for comp in area['compare']]
-        for compare_task_name in compare_task_names:
-            capture_tasks[compare_task_name] >> capture_tasks[task_id]
+    # 撮影には依存関係は不要
     
     print(f"Total capture tasks: {len(capture_tasks)}")
 
@@ -65,17 +64,18 @@ with DAG(
     estimate_tasks = {}
     for area in areas:
         task_id = f"estimate_x{area['x']}_y{area['y']}"
-        hint_coord = game_tile_to_screen_coord(area['x'], area['y'])
+        hint_coord = game_tile_to_screen_lefttop_coord(area['x'], area['y'])
+        adjustment_images = []
+        for comp in area['compare']:
+            coord = game_tile_to_screen_lefttop_coord(comp['x'], comp['y'])
+            adjustment_images.append({
+                "image_path": capture_tasks[f"capture_x{comp['x']}_y{comp['y']}"],
+                "x": coord[0],
+                "y": coord[1],
+            })
         estimate_tasks[task_id] = estimate.override(task_id=task_id, queue="estimate")(
             image_path=capture_tasks[f"capture_x{area['x']}_y{area['y']}"],
-            adjacent_images=[
-                {
-                    "image_path": capture_tasks[f"capture_x{comp['x']}_y{comp['y']}"],
-                    "x": comp['x'],
-                    "y": comp['y'],
-                }
-                for comp in area['compare']
-            ],
+            adjacent_images=adjustment_images,
             hint_x=hint_coord[0],
             hint_y=hint_coord[1],
         )
@@ -87,12 +87,9 @@ with DAG(
 
     # ---------- 最大ズームタイル切り出しタスク ----------
     # タイル数が多いので、TILE_GROUP_SIZE x TILE_GROUP_SIZEごとにまとめて処理する
-    max_width = 256 * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_WIDTH * 4
-    max_height = 128 * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_HEIGHT * 2
-    max_z = math.ceil(math.log2(max(max_width, max_height) / TILE_SIZE))
 
     # タイルの総数
-    total_tiles_per_axis = 2 ** max_z
+    total_tiles_per_axis = 2 ** MAX_Z
     
     # マップが極端に小さい場合、グループサイズを調整
     actual_group_size = min(TILE_GROUP_SIZE, total_tiles_per_axis)
@@ -100,13 +97,14 @@ with DAG(
     # 各エリアのカバー範囲を事前計算し、空間インデックスを作成
     area_coverage = []
     for area in areas:
-        screen_coord = game_tile_to_screen_coord(area['x'], area['y'])
+        # areaのx, y座標はゲーム内タイル座標
+        screen_coord = game_tile_to_screen_lefttop_coord(area['x'], area['y'])
         screen_x = screen_coord[0]
         screen_y = screen_coord[1]
-        capture_x_min = screen_x - (IMAGE_WIDTH // 2)
-        capture_y_min = screen_y - (IMAGE_HEIGHT // 2)
-        capture_x_max = screen_x + (IMAGE_WIDTH // 2)
-        capture_y_max = screen_y + (IMAGE_HEIGHT // 2)
+        capture_x_min = screen_x
+        capture_y_min = screen_y
+        capture_x_max = screen_x + IMAGE_WIDTH
+        capture_y_max = screen_y + IMAGE_HEIGHT
         
         # スクショの4つの角のスクショ座標系での位置を計算
         corners_in_screen_coords = [
@@ -118,7 +116,7 @@ with DAG(
 
         # 4つの角をすべてタイル座標に変換
         corners_in_tile_coords = [
-            screen_coord_to_map_tile(sx, sy, max_z, max_z, MAP_TILES_Y)
+            screen_coord_to_map_tile(sx, sy, MAX_Z)
             for sx, sy in corners_in_screen_coords
         ]
         
@@ -159,8 +157,8 @@ with DAG(
             for tx in range(gx, min(gx + actual_group_size, total_tiles_per_axis)):
                 for ty in range(gy, min(gy + actual_group_size, total_tiles_per_axis)):
                     # このタイルをカバーするスクショ座標の範囲を計算
-                    screen_min = map_tile_to_screen_coord(tx, ty, max_z, max_z, MAP_TILES_Y)
-                    screen_max = map_tile_to_screen_coord(tx + 1, ty + 1, max_z, max_z, MAP_TILES_Y)
+                    screen_min = map_tile_to_screen_coord(tx, ty, MAX_Z)
+                    screen_max = map_tile_to_screen_coord(tx + 1, ty + 1, MAX_Z)
                     screen_x_min = screen_min[0]
                     screen_y_min = screen_min[1]
                     screen_x_max = screen_max[0]
@@ -193,15 +191,15 @@ with DAG(
                             "x": tx,
                             "y": ty,
                             "images": images,
-                            "output_path": f"/images/rawtiles/{max_z}/{tx}/{ty}.png",
+                            "output_path": f"/images/rawtiles/{MAX_Z}/{tx}/{ty}.png",
                         })
-                        tiles[(max_z, tx, ty)] = True
+                        tiles[(MAX_Z, tx, ty)] = True
             
             # 画像が1つもない(=完全にマップ外)グループはタスクを作らない
             if len(tasks_in_group) == 0:
                 continue
             
-            task_id = f"tile_cut_g_z{max_z}_gx{gx}_gy{gy}"
+            task_id = f"tile_cut_g_z{MAX_Z}_gx{gx}_gy{gy}"
             tile_cut_tasks[task_id] = tile_cut_g.override(task_id=task_id, queue="tile_cut")(
                 tasks=tasks_in_group,
             )
@@ -210,15 +208,15 @@ with DAG(
 
     # ---------- タイルマージタスク ----------
     tile_merge_tasks = {}
-    for z in range(max_z - 1, 0, -1):
-        tiles_per_axis = 2 ** max_z
+    for z in range(MAX_Z - 1, -1, -1): # MAX_Z-1から0まで
+        tiles_per_axis = 2 ** MAX_Z
         for gx in range(0, tiles_per_axis, TILE_GROUP_SIZE):
             for gy in range(0, tiles_per_axis, TILE_GROUP_SIZE):
                 tasks_in_group = []
                 for tx in range(gx, gx + TILE_GROUP_SIZE, 1):
                     for ty in range(gy, gy + TILE_GROUP_SIZE, 1):
                         merge_tiles = []
-                        positions = ["top-left", "top-right", "bottom-left", "bottom-right"]
+                        positions = ["top-left", "bottom-left", "top-right", "bottom-right"]
                         for dx in range(2):
                             for dy in range(2):
                                 child_z = z + 1
@@ -254,7 +252,7 @@ with DAG(
         for tx in range(gx, gx + TILE_GROUP_SIZE, 1):
             for ty in range(gy, gy + TILE_GROUP_SIZE, 1):
                 child_coords.append((z + 1, tx * 2, ty * 2))
-        if z + 1 == max_z:
+        if z + 1 == MAX_Z:
             for coord in child_coords:
                 child_task_id = f"tile_cut_g_z{z+1}_gx{(coord[1]//TILE_GROUP_SIZE)*TILE_GROUP_SIZE}_gy{(coord[2]//TILE_GROUP_SIZE)*TILE_GROUP_SIZE}"
                 if child_task_id in tile_cut_tasks:

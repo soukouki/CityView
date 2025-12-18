@@ -1,6 +1,7 @@
 import requests
 from airflow.decorators import task
-from create_tiles.config import SERVICE_TILE_CUT_URL
+from create_tiles.config import SERVICE_TILE_CUT_URL, TILE_SIZE, MAX_Z
+from create_tiles.utils import map_tile_to_screen_coord
 
 @task
 def tile_cut_g(tasks: list):
@@ -14,6 +15,7 @@ def tile_cut_g(tasks: list):
 
 def tile_cut(x: int, y: int, images: list, output_path: str):
     url = f"{SERVICE_TILE_CUT_URL}/cut"
+    cut_area = map_tile_to_screen_coord(x, y, MAX_Z)
     payload = {
         "images": [
             {
@@ -23,8 +25,8 @@ def tile_cut(x: int, y: int, images: list, output_path: str):
             } for img in images
         ],
         "cut_area": {
-            "x": x,
-            "y": y
+            "x": cut_area[0],
+            "y": cut_area[1],
         },
         "output_path": output_path,
     }

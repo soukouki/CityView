@@ -212,6 +212,7 @@ services:
     environment:
       STORAGE_URL: http://storage
       TILE_SIZE: ${TILE_SIZE}
+      CACHE_TTL: 60
     volumes:
       - ./volume-storage:/data
     deploy:

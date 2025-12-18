@@ -1,4 +1,5 @@
 import os
+import math
 
 # サービスのURL設定
 SERVICE_CAPTURE_URL = os.environ.get('SERVICE_CAPTURE_URL', 'http://service-capture:5000')
@@ -23,3 +24,8 @@ ENABLE_HEIGHT = IMAGE_HEIGHT - 2 * IMAGE_MARGIN_HEIGHT
 
 # タイルグループ化のサイズ
 TILE_GROUP_SIZE = 16
+
+# その他
+max_width = PAKSET_SIZE * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_WIDTH * 4
+max_height = (PAKSET_SIZE // 2) * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_HEIGHT * 2
+MAX_Z = math.ceil(math.log2(max(max_width, max_height) / TILE_SIZE))
