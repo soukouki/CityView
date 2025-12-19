@@ -60,7 +60,7 @@ services:
     restart: unless-stopped
 
   # --- Airflow Layer ---
-  airflow-common: &airflow-common
+  x-airflow-common: &x-airflow-common
     build: ./airflow
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres@db:5432/airflow
@@ -95,7 +95,7 @@ services:
     restart: unless-stopped
 
   airflow-init:
-    <<: *airflow-common
+    <<: *x-airflow-common
     command: >
       bash -c "
       airflow db migrate &&
@@ -104,7 +104,7 @@ services:
       "
 
   airflow-webserver:
-    <<: *airflow-common
+    <<: *x-airflow-common
     command: webserver
     ports:
       - "8003:8080"
@@ -115,7 +115,7 @@ services:
       retries: 5
 
   airflow-scheduler:
-    <<: *airflow-common
+    <<: *x-airflow-common
     command: scheduler
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
@@ -125,43 +125,43 @@ services:
 
   # --- Airflow Worker Layer ---
   airflow-worker-capture:
-    <<: *airflow-common
+    <<: *x-airflow-common
     command: celery worker -q capture --concurrency 2
     deploy:
       replicas: 2
 
   airflow-worker-estimate:
-    <<: *airflow-common
+    <<: *x-airflow-common
     command: celery worker -q estimate --concurrency 2
     deploy:
       replicas: 2
 
   airflow-worker-tile-cut:
-    <<: *airflow-common
+    <<: *x-airflow-common
     command: celery worker -q tile_cut --concurrency 2
     deploy:
       replicas: 2
 
   airflow-worker-tile-merge:
-    <<: *airflow-common
+    <<: *x-airflow-common
     command: celery worker -q tile_merge --concurrency 2
     deploy:
       replicas: 2
 
   airflow-worker-tile-compress:
-    <<: *airflow-common
+    <<: *x-airflow-common
     command: celery worker -q tile_compress --concurrency 2
     deploy:
       replicas: 2
 
   airflow-worker-tile-cleanup:
-    <<: *airflow-common
+    <<: *x-airflow-common
     command: celery worker -q tile_cleanup --concurrency 2
     deploy:
       replicas: 2
 
   airflow-worker-capture-cleanup:
-    <<: *airflow-common
+    <<: *x-airflow-common
     command: celery worker -q screenshot_cleanup --concurrency 2
     deploy:
       replicas: 2

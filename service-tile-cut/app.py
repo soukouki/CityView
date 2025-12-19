@@ -51,6 +51,7 @@ def get_cached_image(image_path: str) -> Image.Image:
     # キャッシュミス: ダウンロード
     logger.info(f"画像ダウンロード: {image_path}")
     image = download_image(image_path)
+    image.load()  # 画像をメモリに読み込む
     
     with cache_lock:
         image_cache[image_path] = CacheEntry(image)
@@ -126,6 +127,8 @@ def cut_tile():
         
         if images is None:
             return jsonify({"error": "images parameter is required"}), 400
+        if len(images) == 0:
+            return jsonify({"error": "images parameter cannot be empty"}), 400
         if cut_area is None:
             return jsonify({"error": "cut_area parameter is required"}), 400
         if output_path is None:

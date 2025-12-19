@@ -108,10 +108,11 @@ with DAG(
         screen_coord = game_tile_to_screen_lefttop_coord(area['x'], area['y'])
         screen_x = screen_coord[0]
         screen_y = screen_coord[1]
-        capture_x_min = screen_x
-        capture_y_min = screen_y
-        capture_x_max = screen_x + IMAGE_WIDTH
-        capture_y_max = screen_y + IMAGE_HEIGHT
+        # 念の為もうちょっと余裕を持たせてキャプチャ範囲を計算
+        capture_x_min = screen_x - IMAGE_MARGIN_WIDTH
+        capture_y_min = screen_y - IMAGE_MARGIN_HEIGHT
+        capture_x_max = screen_x + IMAGE_WIDTH + IMAGE_MARGIN_WIDTH
+        capture_y_max = screen_y + IMAGE_HEIGHT + IMAGE_MARGIN_HEIGHT
         
         # スクショの4つの角のスクショ座標系での位置を計算
         corners_in_screen_coords = [

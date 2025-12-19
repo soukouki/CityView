@@ -14,8 +14,8 @@ PAKSET_NAME="Pak128.Britain-Ex"
 PAKSET_SIZE=128
 
 # マップの大きさについて
-MAP_TILES_X=31
-MAP_TILES_Y=511
+MAP_TILES_X=511
+MAP_TILES_Y=31
 
 # 地図タイルについて
 TILE_SIZE=512
@@ -33,11 +33,11 @@ CROP_OFFSET_Y=64   # メニューバー分
 # 2倍ズームに対応するため2倍
 CROP_OFFSET_X=$(( PAKSET_SIZE * 2 ))
 
-# 塗りしろは1タイル分、2倍ズームに対応するため2倍
-IMAGE_MARGIN_WIDTH=$(( PAKSET_SIZE * 2 ))
+# 塗りしろは1タイル分、2倍ズームに対応するため2倍...で足りなかったので4倍
+IMAGE_MARGIN_WIDTH=$(( PAKSET_SIZE * 4 ))
 
-# 縦方向は1/2倍されるので、2倍ズームと相殺して1倍になる
-IMAGE_MARGIN_HEIGHT=$(( PAKSET_SIZE ))
+# 縦方向は1/2倍されるので、2倍ズームと相殺して1倍になる...で足りなかったので2倍
+IMAGE_MARGIN_HEIGHT=$(( PAKSET_SIZE * 2 ))
 
 # 糊代を含めたスクショ画像サイズ
 IMAGE_WIDTH=$(( DELTA * PAKSET_SIZE + IMAGE_MARGIN_WIDTH * 2 ))
