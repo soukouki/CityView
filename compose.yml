@@ -24,6 +24,8 @@ x-airflow-common: &x-airflow-common
       IMAGE_MARGIN_WIDTH: ${IMAGE_MARGIN_WIDTH}
       IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
       TZ: ${TZ}
+      AIRFLOW__CORE__DAG_FILE_PROCESSOR_TIMEOUT: 120
+      AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: 120
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
       - airflow-logs:/opt/airflow/logs
@@ -182,10 +184,10 @@ services:
       CAPTURE_CROP_HEIGHT: ${IMAGE_HEIGHT}
       CAPTURE_CROP_OFFSET_X: ${CROP_OFFSET_X}
       CAPTURE_CROP_OFFSET_Y: ${CROP_OFFSET_Y}
-      CAPTURE_TTL_SECONDS: 600
+      CAPTURE_TTL_SECONDS: 60
       GAME_BOOT_TIMEOUT_SECONDS: 180
       GAME_BOOT_POLL_INTERVAL_SECONDS: 1
-      GAME_BOOT_CHECK_X: 256
+      GAME_BOOT_CHECK_X: 256 # この座標が黒いかどうかで起動完了を判定する
       GAME_BOOT_CHECK_Y: 256
     volumes:
       - ./volume-storage:/data
