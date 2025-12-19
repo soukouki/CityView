@@ -199,7 +199,7 @@ with DAG(
                             "x": tx,
                             "y": ty,
                             "images": images,
-                            "output_path": f"/images/rawtiles/{MAX_Z}/{tx}/{ty}.png",
+                            "output_path": f"/images/rawtiles/{save_data_name}/{MAX_Z}/{tx}/{ty}.png",
                         })
                         tiles[(MAX_Z, tx, ty)] = True
             
@@ -232,14 +232,14 @@ with DAG(
                                 child_y = ty * 2 + dy
                                 if (child_z, child_x, child_y) in tiles:
                                     merge_tiles.append({
-                                        "path": f"/images/rawtiles/{child_z}/{child_x}/{child_y}.png",
+                                        "path": f"/images/rawtiles/{save_data_name}/{child_z}/{child_x}/{child_y}.png",
                                         "position": positions[dx * 2 + dy],
                                     })
                         if len(merge_tiles) == 0:
                             continue
                         tasks_in_group.append({
                             "tiles": merge_tiles,
-                            "output_path": f"/images/rawtiles/{z}/{tx}/{ty}.png",
+                            "output_path": f"/images/rawtiles/{save_data_name}/{z}/{tx}/{ty}.png",
                         })
                         tiles[(z, tx, ty)] = True
                 if len(tasks_in_group) == 0:
@@ -287,9 +287,8 @@ with DAG(
             for ty in range(gy, gy + TILE_GROUP_SIZE):
                 if (z, tx, ty) in tiles:
                     tasks_in_group.append({
-                        "z": z,
-                        "x": tx,
-                        "y": ty,
+                        "input_path": f"/images/rawtiles/{save_data_name}/{z}/{tx}/{ty}.png",
+                        "output_path": f"/images/tiles/{save_data_name}/{z}/{tx}/{ty}.avif",
                     })
         if len(tasks_in_group) == 0:
             continue
@@ -312,9 +311,8 @@ with DAG(
             for ty in range(gy, gy + TILE_GROUP_SIZE):
                 if (z, tx, ty) in tiles:
                     tasks_in_group.append({
-                        "z": z,
-                        "x": tx,
-                        "y": ty,
+                        "input_path": f"/images/rawtiles/{save_data_name}/{z}/{tx}/{ty}.png",
+                        "output_path": f"/images/tiles/{save_data_name}/{z}/{tx}/{ty}.avif",
                     })
         if len(tasks_in_group) == 0:
             continue

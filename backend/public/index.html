@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simutrans CityView</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- MapLibre GL JS -->
+    <script src='https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js'></script>
+    <link href='https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css' rel='stylesheet' />
+    
+    <!-- Vue.js 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    
+    <style>
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+        
+        .controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body class="m-0 p-0">
+    <div id="app">
+        <!-- コントロールパネル -->
+        <div class="controls">
+            <div class="bg-white rounded-lg shadow-lg p-4 space-y-2">
+                <div class="text-sm font-semibold text-gray-700">savedatas</div>
+                <select 
+                    v-model="selectedSave" 
+                    @change="changeSaveData"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                    <option value="demo">demo</option>
+                </select>
+                
+                <div class="pt-2 border-t border-gray-200">
+                    <div class="text-xs text-gray-500">
+                        coords: {{ coordinates.lng.toFixed(4) }}, {{ coordinates.lat.toFixed(4) }}
+                    </div>
+                    <div class="text-xs text-gray-500">
+                        zoomlevel: {{ zoom.toFixed(1) }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- マップコンテナ -->
+        <div id="map"></div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    map: null,
+                    selectedSave: 'demo',
+                    coordinates: { lng: 0, lat: 0 },
+                    zoom: 0
+                };
+            },
+            mounted() {
+                this.initMap();
+            },
+            methods: {
+                initMap() {
+                    // MapLibre GL JS の初期化
+                    this.map = new maplibregl.Map({
+                        container: 'map',
+                        style: {
+                            version: 8,
+                            sources: {
+                                'raster-tiles': {
+                                    type: 'raster',
+                                    tiles: [
+                                        `/tiles/${this.selectedSave}/{z}/{x}/{y}.avif`
+                                    ],
+                                    tileSize: 256,
+                                    maxzoom: 18,
+                                    minzoom: 0
+                                }
+                            },
+                            layers: [{
+                                id: 'simple-tiles',
+                                type: 'raster',
+                                source: 'raster-tiles'
+                            }]
+                        },
+                        center: [0, 0],
+                        zoom: 0,
+                        minZoom: 0,
+                        maxZoom: 18
+                    });
+
+                    // ナビゲーションコントロールを追加
+                    this.map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
+
+                    // 座標とズームレベルの更新
+                    this.map.on('move', () => {
+                        const center = this.map.getCenter();
+                        this.coordinates = {
+                            lng: center.lng,
+                            lat: center.lat
+                        };
+                        this.zoom = this.map.getZoom();
+                    });
+
+                    // 初期値の設定
+                    this.updateCoordinates();
+                },
+                
+                updateCoordinates() {
+                    if (this.map) {
+                        const center = this.map.getCenter();
+                        this.coordinates = {
+                            lng: center.lng,
+                            lat: center.lat
+                        };
+                        this.zoom = this.map.getZoom();
+                    }
+                },
+                
+                changeSaveData() {
+                    // セーブデータ切り替え時にマップを再初期化
+                    if (this.map) {
+                        this.map.remove();
+                    }
+                    this.initMap();
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

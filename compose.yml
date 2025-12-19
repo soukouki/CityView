@@ -1,3 +1,39 @@
+
+# --- templates ---
+x-airflow-common: &x-airflow-common
+    build: ./airflow
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres@db:5432/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://postgres@db:5432/airflow
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__API__AUTH_BACKEND: airflow.api.auth.backend.default
+      SERVICE_CAPTURE_URL: http://service-capture:5000
+      SERVICE_ESTIMATE_URL: http://service-estimate:5001
+      SERVICE_TILE_CUT_URL: http://service-tile-cut:5002
+      SERVICE_TILE_MERGE_URL: http://service-tile-merge:5003
+      SERVICE_TILE_COMPRESS_URL: http://service-tile-compress:5004
+      BACKEND_INTERNAL_URL: http://backend:8002
+      PAKSET_SIZE: ${PAKSET_SIZE}
+      TILE_SIZE: ${TILE_SIZE}
+      DELTA: ${DELTA}
+      MAP_TILES_X: ${MAP_TILES_X}
+      MAP_TILES_Y: ${MAP_TILES_Y}
+      IMAGE_WIDTH: ${IMAGE_WIDTH}
+      IMAGE_HEIGHT: ${IMAGE_HEIGHT}
+      IMAGE_MARGIN_WIDTH: ${IMAGE_MARGIN_WIDTH}
+      IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
+      TZ: ${TZ}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags:ro
+      - airflow-logs:/opt/airflow/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
 services:
   # --- Infrastructure Layer ---
   db:
@@ -57,43 +93,14 @@ services:
         condition: service_healthy
       airflow-webserver:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     restart: unless-stopped
 
   # --- Airflow Layer ---
-  x-airflow-common: &x-airflow-common
-    build: ./airflow
-    environment:
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres@db:5432/airflow
-      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
-      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://postgres@db:5432/airflow
-      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-      AIRFLOW__API__AUTH_BACKEND: airflow.api.auth.backend.default
-      SERVICE_CAPTURE_URL: http://service-capture:5000
-      SERVICE_ESTIMATE_URL: http://service-estimate:5001
-      SERVICE_TILE_CUT_URL: http://service-tile-cut:5002
-      SERVICE_TILE_MERGE_URL: http://service-tile-merge:5003
-      SERVICE_TILE_COMPRESS_URL: http://service-tile-compress:5004
-      BACKEND_INTERNAL_URL: http://backend:8002
-      PAKSET_SIZE: ${PAKSET_SIZE}
-      TILE_SIZE: ${TILE_SIZE}
-      DELTA: ${DELTA}
-      MAP_TILES_X: ${MAP_TILES_X}
-      MAP_TILES_Y: ${MAP_TILES_Y}
-      IMAGE_WIDTH: ${IMAGE_WIDTH}
-      IMAGE_HEIGHT: ${IMAGE_HEIGHT}
-      IMAGE_MARGIN_WIDTH: ${IMAGE_MARGIN_WIDTH}
-      IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
-      TZ: ${TZ}
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags:ro
-      - airflow-logs:/opt/airflow/logs
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
   airflow-init:
     <<: *x-airflow-common
     command: >
@@ -117,11 +124,6 @@ services:
   airflow-scheduler:
     <<: *x-airflow-common
     command: scheduler
-    healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
 
   # --- Airflow Worker Layer ---
   airflow-worker-capture:
@@ -189,6 +191,11 @@ services:
       - ./volume-storage:/data
       - ./volume-bin:/app/bin
       - ./volume-save:/root/simutrans
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     deploy:
       replicas: 2
     restart: unless-stopped
@@ -203,6 +210,11 @@ services:
       IMAGE_HEIGHT: ${IMAGE_HEIGHT}
     volumes:
       - ./volume-storage:/data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     deploy:
       replicas: 2
     restart: unless-stopped

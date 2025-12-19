@@ -51,7 +51,7 @@ def upload_compressed_tile(tile_path: str, image_data: bytes) -> None:
 def compress_tile():
     """
     タイル圧縮エンドポイント（新スキーマ）
-    リクエスト: {"z": number, "x": number, "y": number}
+    リクエスト: {"input_path": str, "output_path": str}
     レスポンス: {}
     """
     try:
@@ -60,24 +60,17 @@ def compress_tile():
         if not data:
             return jsonify({"error": "Invalid JSON payload"}), 400
         
-        z = data.get('z')
-        x = data.get('x')
-        y = data.get('y')
+        input_path = data.get('input_path')
+        if input_path is None:
+            return jsonify({"error": "input_path parameter is required"}), 400
+        output_path = data.get('output_path')
+        if output_path is None:
+            return jsonify({"error": "output_path parameter is required"}), 400
         
-        if z is None:
-            return jsonify({"error": "z parameter is required"}), 400
-        if x is None:
-            return jsonify({"error": "x parameter is required"}), 400
-        if y is None:
-            return jsonify({"error": "y parameter is required"}), 400
-        
-        # パスを自動構築
-        raw_tile_path = f"/images/rawtiles/{z}/{x}/{y}.png"
-        
-        logger.info(f"タイル圧縮開始: z={z}, x={x}, y={y}, path={raw_tile_path}")
+        logger.info(f"タイル圧縮開始: input_path={input_path}, output_path={output_path}")
         
         # 未圧縮タイルを取得
-        img = download_tile(raw_tile_path)
+        img = download_tile(input_path)
         
         # AVIF形式で圧縮
         output_buffer = io.BytesIO()
@@ -87,8 +80,7 @@ def compress_tile():
         compressed_data = output_buffer.getvalue()
         
         # storageに保存
-        compressed_tile_path = f"/images/tiles/{z}/{x}/{y}.avif"
-        upload_compressed_tile(compressed_tile_path, compressed_data)
+        upload_compressed_tile(output_path, compressed_data)
         
         # 空のオブジェクトを返却
         return jsonify({})

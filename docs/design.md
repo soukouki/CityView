@@ -528,7 +528,7 @@
 
   | メソッド | パス | 説明 | リクエスト | レスポンス |
   |---|---|---|---|---|
-  | POST | `/compress` | タイル圧縮 | `{"z": number, "x": number, "y": number}` | `{}` |
+  | POST | `/compress` | タイル圧縮 | `{"input_path": "str", "outpput_path": "str"}` | `{}` |
 
 - **レプリカ数**: `2`
 - **処理フロー**:
@@ -736,9 +736,8 @@ Worker は以下を実行します:
 - `service-tile-compress` を呼び出し: `POST http://service-tile-compress:5004/compress`
   ```json
   {
-    "z": 18,
-    "x": 10,
-    "y": 20
+    "input_path": "/images/rawtiles/demo/18/10/20.png",
+    "output_path": "/images/tiles/demo/18/10/20.avif"
   }
   ```
 
