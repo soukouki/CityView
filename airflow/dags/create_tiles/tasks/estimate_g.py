@@ -27,21 +27,23 @@ def estimate_g(group: list, capture_results: list, estimate_results: list):
     capture_dict = {}
     for capture_result in capture_results:
         for xy_str, image_path in capture_result.items():
-            capture_dict[xy_str] = image_path
+            x, y = parse_xy_str(xy_str)
+            capture_dict[(x, y)] = image_path
     estimate_dict = {}
     for estimate_result in estimate_results:
         for xy_str, coords in estimate_result.items():
-            estimate_dict[xy_str] = coords
+            x, y = xy_str
+            estimate_dict[(x, y)] = coords
 
     estimated_results = {}
     for area in group:
         print(f"Estimating coords for x:{area['x']}, y:{area['y']}")
-        image_path = capture_dict[f"x{area['x']}_y{area['y']}"]
+        image_path = capture_dict[(area['x'], area['y'])]
         hint_coord = game_tile_to_screen_lefttop_coord(area['x'], area['y'])
         adjustment_images = []
         for comp in area['compare']:
-            adj_image_path = capture_dict[f"x{comp['x']}_y{comp['y']}"]
-            adj_coords = estimate_dict.get((comp['x'], comp['y']))
+            adj_image_path = capture_dict[(comp['x'], comp['y'])]
+            adj_coords = estimate_dict[(comp['x'], comp['y'])]
             adjustment_images.append({
                 "image_path": adj_image_path,
                 "coords": adj_coords,
@@ -53,7 +55,7 @@ def estimate_g(group: list, capture_results: list, estimate_results: list):
             hint_x=hint_coord[0],
             hint_y=hint_coord[1]
         )
-        estimated_results[f"x{area['x']}_y{area['y']}"] = estimated_coords
+        estimated_results[(area['x'], area['y'])] = estimated_coords
         estimate_dict[(area['x'], area['y'])] = estimated_coords
 
     return estimated_results
