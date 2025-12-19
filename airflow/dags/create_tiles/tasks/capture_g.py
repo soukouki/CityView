@@ -3,9 +3,16 @@ from airflow.decorators import task
 from create_tiles.config import SERVICE_CAPTURE_URL
 
 @task
-def capture(save_data_name: str, x: int, y: int, output_path: str):
-    print(f"Capturing area {save_data_name} at ({x}, {y})")
+def capture_g(tasks: list):
+    print(f"Capturing group with {len(tasks)} tasks")
+    captured_results = {}
+    for task in tasks:
+        print(f"Capturing area {task['save_data_name']} at ({task['x']}, {task['y']}) to {task['output_path']}")
+        output_path = capture(*task.values())
+        captured_results[f"x{task['x']}_y{task['y']}"] = output_path
+    return captured_results
 
+def capture(save_data_name: str, x: int, y: int, output_path: str):
     url = f"{SERVICE_CAPTURE_URL}/capture"
     payload = {
         "save_data_name": save_data_name,

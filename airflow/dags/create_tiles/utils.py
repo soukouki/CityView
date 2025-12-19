@@ -43,3 +43,10 @@ def map_tile_to_screen_coord(tile_x: int, tile_y: int, z: int) -> tuple[int, int
     screen_x_min = tile_x * TILE_SIZE * scale - (PAKSET_SIZE * 2) * MAP_TILES_Y - IMAGE_MARGIN_WIDTH * 2
     screen_y_min = tile_y * TILE_SIZE * scale
     return screen_x_min, screen_y_min
+
+# x123_y456形式の文字列を分解する
+def parse_xy_str(xy_str: str) -> tuple[int, int]:
+    x_str, y_str = xy_str.split('_')
+    x = int(x_str[1:])
+    y = int(y_str[1:])
+    return x, y

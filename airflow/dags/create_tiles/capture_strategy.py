@@ -1,6 +1,8 @@
 from typing import List, Dict, Tuple
 
 PRIORITY_CONSTANT = 10000 # 適当な大きい数値
+LARGE_GROUP_SIZE = 100 # 基本的なグループ分割のサイズ
+SMALL_GROUP_SIZE = 5 # 最初の斜め移動用のグループ分割のサイズ(早く依存タスクを開始するために小さめの値を指定する)
 
 class CaptureStrategy:
     def __init__(self, map_x: int, map_y: int, delta: int):
@@ -8,9 +10,9 @@ class CaptureStrategy:
         self.map_y = map_y
         self.delta = delta
     
-    def generate_capture_areas(self) -> List[Dict]:
-        """撮影エリアリストを生成"""
-        screenshots = []
+    def generate_capture_areas_groups(self) -> List[List[Dict]]:
+        """撮影エリアリストを生成（グループ化）"""
+        screenshots = [[]]  # リストのリストとして初期化
         
         if self.map_x >= self.map_y:
             self._generate_x_ge_y(screenshots)
@@ -19,18 +21,27 @@ class CaptureStrategy:
 
         screenshots = self._remove_duplicates(screenshots)
         
+        # 空のグループを除去
+        screenshots = [group for group in screenshots if group]
+        
         return screenshots
 
     # 重複を削除
-    def _remove_duplicates(self, screenshots: List[Dict]) -> List[Dict]:
+    def _remove_duplicates(self, screenshots: List[List[Dict]]) -> List[List[Dict]]:
         seen = set()
-        unique_screenshots = []
-        for shot in screenshots:
-            identifier = (shot['x'], shot['y'])
-            if identifier not in seen:
-                seen.add(identifier)
-                unique_screenshots.append(shot)
-        return unique_screenshots
+        result = []
+        
+        for group in screenshots:
+            unique_group = []
+            for shot in group:
+                identifier = (shot['x'], shot['y'])
+                if identifier not in seen:
+                    seen.add(identifier)
+                    unique_group.append(shot)
+            if unique_group:  # 空でないグループのみ追加
+                result.append(unique_group)
+        
+        return result
     
     def _left(self, x: int, y: int) -> Tuple[int, int]:
         """左側への移動（境界制限付き）"""
@@ -74,10 +85,10 @@ class CaptureStrategy:
         
         return ideal_x, ideal_y
     
-    def _generate_x_ge_y(self, screenshots: List[Dict]):
+    def _generate_x_ge_y(self, screenshots: List[List[Dict]]):
         """map_x >= map_yの場合の生成ロジック"""
         current_x, current_y = 0, 0
-        screenshots.append({
+        screenshots[-1].append({
             'area_id': 0,
             'x': current_x, 'y': current_y,
             'compare': [],
@@ -92,7 +103,7 @@ class CaptureStrategy:
         while True:
             # 下に移動
             new_x, new_y = self._down(current_x, current_y)
-            screenshots.append({
+            screenshots[-1].append({
                 'area_id': area_id,
                 'x': new_x, 'y': new_y,
                 'compare': [{'x': current_x, 'y': current_y}],
@@ -107,7 +118,7 @@ class CaptureStrategy:
             
             # 右に移動
             new_x, new_y = self._right(current_x, current_y)
-            screenshots.append({
+            screenshots[-1].append({
                 'area_id': area_id,
                 'x': new_x, 'y': new_y,
                 'compare': [{'x': current_x, 'y': current_y}],
@@ -118,16 +129,22 @@ class CaptureStrategy:
             if current_x == self.map_x:
                 break
             priority -= 1
+
+            if len(screenshots[-1]) >= SMALL_GROUP_SIZE:
+                screenshots.append([])
+
+        if screenshots[-1] != []:
+            screenshots.append([])
         
         # PHASE 2: 左方向への走査
         for start_point in flag1:
-            priority = PRIORITY_CONSTANT if start_point == flag1[-1] else PRIORITY_CONSTANT * 2 # 最後の行は優先度高め
+            priority = PRIORITY_CONSTANT * 2 if start_point == flag1[-1] else PRIORITY_CONSTANT # 最後の行は優先度高め
             current_x, current_y = start_point['x'], start_point['y']
             while True:
                 new_x, new_y = self._left(current_x, current_y)
                 if new_x == current_x and new_y == current_y:
                     break
-                screenshots.append({
+                screenshots[-1].append({
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
                     'compare': [{'x': current_x, 'y': current_y}],
@@ -136,7 +153,13 @@ class CaptureStrategy:
                 area_id += 1
                 current_x, current_y = new_x, new_y
                 priority -= 1
-        
+
+                if len(screenshots[-1]) >= LARGE_GROUP_SIZE:
+                    screenshots.append([])
+
+            if screenshots[-1] != []:
+                screenshots.append([])
+
         # PHASE 3: 下方向への走査
         last_line = flag1[-1]
         start_points = []
@@ -155,7 +178,7 @@ class CaptureStrategy:
                 new_x, new_y = self._down(current_x, current_y)
                 if new_x == current_x and new_y == current_y:
                     break
-                screenshots.append({
+                screenshots[-1].append({
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
                     'compare': [{'x': current_x, 'y': current_y}],
@@ -164,11 +187,17 @@ class CaptureStrategy:
                 area_id += 1
                 current_x, current_y = new_x, new_y
                 priority -= 1
+
+                if len(screenshots[-1]) >= LARGE_GROUP_SIZE:
+                    screenshots.append([])
+
+            if screenshots[-1] != []:
+                screenshots.append([])
     
-    def _generate_x_lt_y(self, screenshots: List[Dict]):
+    def _generate_x_lt_y(self, screenshots: List[List[Dict]]):
         """map_x < map_yの場合の生成ロジック"""
         current_x, current_y = 0, 0
-        screenshots.append({
+        screenshots[-1].append({
             'area_id': 0,
             'x': current_x, 'y': current_y,
             'compare': [],
@@ -183,7 +212,7 @@ class CaptureStrategy:
         while True:
             # 下に移動
             new_x, new_y = self._down(current_x, current_y)
-            screenshots.append({
+            screenshots[-1].append({
                 'area_id': area_id,
                 'x': new_x, 'y': new_y,
                 'compare': [{'x': current_x, 'y': current_y}],
@@ -198,7 +227,7 @@ class CaptureStrategy:
             
             # 左に移動
             new_x, new_y = self._left(current_x, current_y)
-            screenshots.append({
+            screenshots[-1].append({
                 'area_id': area_id,
                 'x': new_x, 'y': new_y,
                 'compare': [{'x': current_x, 'y': current_y}],
@@ -209,16 +238,22 @@ class CaptureStrategy:
             if current_x == self.map_x:
                 break
             privacy -= 1
+            
+            if len(screenshots[-1]) >= SMALL_GROUP_SIZE:
+                screenshots.append([])
+        
+        if screenshots[-1] != []:
+            screenshots.append([])
         
         # PHASE 2: 右方向への走査
         for start_point in flag1:
-            priority = PRIORITY_CONSTANT if start_point == flag1[-1] else PRIORITY_CONSTANT * 2 # 最後の行は優先度高め
+            priority = PRIORITY_CONSTANT * 2 if start_point == flag1[-1] else PRIORITY_CONSTANT # 最後の行は優先度高め
             current_x, current_y = start_point['x'], start_point['y']
             while True:
                 new_x, new_y = self._right(current_x, current_y)
                 if new_x == current_x and new_y == current_y:
                     break
-                screenshots.append({
+                screenshots[-1].append({
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
                     'compare': [{'x': current_x, 'y': current_y}],
@@ -227,6 +262,12 @@ class CaptureStrategy:
                 area_id += 1
                 current_x, current_y = new_x, new_y
                 priority -= 1
+                
+                if len(screenshots[-1]) >= LARGE_GROUP_SIZE:
+                    screenshots.append([])
+            
+            if screenshots[-1] != []:
+                screenshots.append([])
         
         # PHASE 3: 下方向への走査
         last_line = flag1[-1]
@@ -246,7 +287,7 @@ class CaptureStrategy:
                 new_x, new_y = self._down(current_x, current_y)
                 if new_x == current_x and new_y == current_y:
                     break
-                screenshots.append({
+                screenshots[-1].append({
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
                     'compare': [{'x': current_x, 'y': current_y}],
@@ -255,3 +296,19 @@ class CaptureStrategy:
                 area_id += 1
                 current_x, current_y = new_x, new_y
                 priority -= 1
+                
+                if len(screenshots[-1]) >= LARGE_GROUP_SIZE:
+                    screenshots.append([])
+
+            if screenshots[-1] != []:
+                screenshots.append([])
+
+# テスト
+if __name__ == "__main__":
+    strategy = CaptureStrategy(map_x=4000, map_y=5000, delta=40)
+    area_groups = strategy.generate_capture_areas_groups()
+    
+    for group_idx, group in enumerate(area_groups):
+        print(f"\n=== Group {group_idx} ({len(group)} items) ===")
+        for area in group:
+            print(area)
