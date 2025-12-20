@@ -14,7 +14,6 @@ app = Flask(__name__)
 
 # 環境変数から設定を読み込み
 STORAGE_URL = os.getenv('STORAGE_URL', 'http://storage')
-AVIF_QUALITY = int(os.getenv('AVIF_QUALITY', '30'))
 
 def download_tile(tile_path: str) -> Image.Image:
     """storage から未圧縮タイルをダウンロードして PIL.Image オブジェクトを返す"""
@@ -66,6 +65,9 @@ def compress_tile():
         output_path = data.get('output_path')
         if output_path is None:
             return jsonify({"error": "output_path parameter is required"}), 400
+        quality = data.get('quality')
+        if quality is None:
+            return jsonify({"error": "quality parameter is required"}), 400
         
         logger.info(f"タイル圧縮開始: input_path={input_path}, output_path={output_path}")
         
@@ -74,7 +76,7 @@ def compress_tile():
         
         # AVIF形式で圧縮
         output_buffer = io.BytesIO()
-        img.save(output_buffer, format='AVIF', quality=AVIF_QUALITY)
+        img.save(output_buffer, format='AVIF', quality=quality)
         img.close()
         output_buffer.seek(0)
         compressed_data = output_buffer.getvalue()

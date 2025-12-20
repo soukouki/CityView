@@ -24,6 +24,8 @@ x-airflow-common: &x-airflow-common
       IMAGE_HEIGHT: ${IMAGE_HEIGHT}
       IMAGE_MARGIN_WIDTH: ${IMAGE_MARGIN_WIDTH}
       IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
+      TILE_QUALITY_MAX_ZOOM: ${TILE_QUALITY_MAX_ZOOM}
+      TILE_QUALITY_OTHER: ${TILE_QUALITY_OTHER}
       TZ: ${TZ}
       AIRFLOW__CORE__DAG_FILE_PROCESSOR_TIMEOUT: 120
       AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: 120
@@ -249,7 +251,6 @@ services:
     build: ./service-tile-compress
     environment:
       STORAGE_URL: http://storage
-      AVIF_QUALITY: ${TILE_QUALITY}
     volumes:
       - ./volume-storage:/data
     deploy:

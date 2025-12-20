@@ -1,4 +1,5 @@
 import requests
+from airflow.operators.python import get_current_context
 from airflow.decorators import task
 from create_tiles.config import (
     SERVICE_TILE_CUT_URL,
@@ -13,7 +14,8 @@ from create_tiles.config import (
 from create_tiles.utils import map_tile_to_screen_coord, parse_xy_str
 
 @task
-def tile_cut_g(save_data_name: str, gx: int, gy: int, related_areas: list, capture_results: list, estimate_results: list):
+def tile_cut_g(gx: int, gy: int, related_areas: list, capture_results: list, estimate_results: list):
+    save_data_name = get_current_context()['params']['save_data_name']
     print(f"Processing tile cut group at ({gx}, {gy}) with {len(related_areas)} related areas")
     for area in related_areas:
         print(f"  Related area: x{area['x']}, y{area['y']}")

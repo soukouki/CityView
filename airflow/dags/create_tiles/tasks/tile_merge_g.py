@@ -1,10 +1,13 @@
 import requests
+from airflow.operators.python import get_current_context
 from airflow.decorators import task
+from airflow.operators.python import get_current_context
 from create_tiles.config import SERVICE_TILE_MERGE_URL, TILE_GROUP_SIZE
 from create_tiles.utils import parse_zxy_str
 
 @task
-def tile_merge_g(save_data_name: str, z: int, gx: int, gy: int, child_results: list):
+def tile_merge_g(z: int, gx: int, gy: int, child_results: list):
+    save_data_name = get_current_context()['params']['save_data_name']
     print(f"Processing tile merge group at z={z}, ({gx}, {gy}) with {len(child_results)} child results")
     
     # child_resultsは辞書のリスト。1つの辞書にマージ

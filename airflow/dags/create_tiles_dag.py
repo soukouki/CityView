@@ -15,6 +15,8 @@ from create_tiles.config import (
     ENABLE_HEIGHT,
     TILE_GROUP_SIZE,
     MAX_Z,
+    TILE_QUALITY_MAX_ZOOM,
+    TILE_QUALITY_OTHER,
 )
 from create_tiles.utils import (
     game_tile_to_screen_coord,
@@ -44,7 +46,6 @@ with DAG(
         delta=DELTA,
     )
     areas_groups = strategy.generate_capture_areas_groups()
-    save_data_name = dag.params["save_data_name"]
     areas_to_group = {}
     for group in areas_groups:
         for area in group:
@@ -57,10 +58,8 @@ with DAG(
         tasks_in_group = []
         for area in group:
             tasks_in_group.append({
-                "save_data_name": save_data_name,
                 "x": area['x'],
                 "y": area['y'],
-                "output_path": f"/images/screenshots/{save_data_name}/x{area['x']}_y{area['y']}.png",
             })
         gx = group[0]['x']
         gy = group[0]['y']
@@ -237,7 +236,6 @@ with DAG(
             task_id=task_id,
             queue="tile_cut",
         )(
-            save_data_name=save_data_name,
             gx=gx,
             gy=gy,
             related_areas=related_areas,
@@ -282,7 +280,6 @@ with DAG(
                 task_id=task_id,
                 queue="tile_merge",
             )(
-                save_data_name=save_data_name,
                 z=z,
                 gx=gx,
                 gy=gy,
@@ -306,11 +303,11 @@ with DAG(
             task_id=compress_task_id,
             queue="tile_compress",
         )(
-            save_data_name=save_data_name,
             z=MAX_Z,
             gx=gx,
             gy=gy,
             tile_results=tile_cut_tasks[task_id],
+            quality=TILE_QUALITY_MAX_ZOOM,
         )
     
     # z=MAX_Z-1〜0はtile_merge_gから
@@ -325,11 +322,11 @@ with DAG(
                 task_id=compress_task_id,
                 queue="tile_compress",
             )(
-                save_data_name=save_data_name,
                 z=z,
                 gx=gx,
                 gy=gy,
                 tile_results=tile_merge_tasks[task_id],
+                quality=TILE_QUALITY_OTHER,
             )
 
     print(f"Total tile compress tasks: {len(tile_compress_tasks)}")

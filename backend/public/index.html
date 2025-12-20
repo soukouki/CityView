@@ -82,12 +82,12 @@
         <div class="controls">
             <div class="control-panel bg-white rounded-lg shadow-lg p-4 space-y-2">
                 <div class="control-title text-sm font-semibold text-gray-700">Save Data</div>
-                <select 
-                    v-model="selectedSave" 
+                <select
+                    v-model="selectedSave"
                     @change="changeSaveData"
                     class="control-select w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                    <option value="demo">demo</option>
+                    <option value="demo1">demo1</option>
                     <option value="demo2">demo2</option>
                 </select>
                 
@@ -100,7 +100,7 @@
                     </div>
                 </div>
                 
-                <button 
+                <button
                     @click="copyShareLink"
                     class="control-button w-full px-3 py-2 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
                 >
@@ -119,7 +119,7 @@
             data() {
                 return {
                     map: null,
-                    selectedSave: 'demo',
+                    selectedSave: 'demo1',
                     coordinates: { lng: 0, lat: 0 },
                     tileCoords: { x: 0.5, y: 0.5 },
                     zoom: 0,
