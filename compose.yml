@@ -27,8 +27,6 @@ x-airflow-common: &x-airflow-common
       TILE_QUALITY_MAX_ZOOM: ${TILE_QUALITY_MAX_ZOOM}
       TILE_QUALITY_OTHER: ${TILE_QUALITY_OTHER}
       TZ: ${TZ}
-      AIRFLOW__CORE__DAG_FILE_PROCESSOR_TIMEOUT: 120
-      AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: 120
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
       - airflow-logs:/opt/airflow/logs

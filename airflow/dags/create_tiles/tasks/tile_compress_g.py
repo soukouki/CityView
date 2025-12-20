@@ -5,7 +5,7 @@ from create_tiles.config import SERVICE_TILE_COMPRESS_URL, TILE_GROUP_SIZE
 from create_tiles.utils import parse_zxy_str
 
 @task
-def tile_compress_g(z: int, gx: int, gy: int, tile_results: dict, quality: int):
+def tile_compress_g(z: int, gx: int, gy: int, tile_results: dict, quality: str):
     save_data_name = get_current_context()['params']['save_data_name']
     print(f"Processing tile compress group at z={z}, ({gx}, {gy}) with {len(tile_results)} tiles")
     
@@ -18,7 +18,7 @@ def tile_compress_g(z: int, gx: int, gy: int, tile_results: dict, quality: int):
     print(f"Compression complete for {len(tile_results)} tiles")
     return True
 
-def tile_compress(input_path: str, output_path: str, quality: int):
+def tile_compress(input_path: str, output_path: str, quality: str):
     url = f"{SERVICE_TILE_COMPRESS_URL}/compress"
     payload = {
         "input_path": input_path,

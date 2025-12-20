@@ -528,7 +528,9 @@
 
   | メソッド | パス | 説明 | リクエスト | レスポンス |
   |---|---|---|---|---|
-  | POST | `/compress` | タイル圧縮 | `{"input_path": "str", "outpput_path": "str", "quality": int}` | `{}` |
+  | POST | `/compress` | タイル圧縮 | `{"input_path": "str", "outpput_path": "str", "quality": str}` | `{}` |
+
+  - `quality` : 0〜100 もしくは "lossless"
 
 - **レプリカ数**: `2`
 - **処理フロー**:
@@ -738,7 +740,7 @@ Worker は以下を実行します:
   {
     "input_path": "/images/rawtiles/demo/18/10/20.png",
     "output_path": "/images/tiles/demo/18/10/20.avif",
-    "quality": 30
+    "quality": "30"
   }
   ```
 

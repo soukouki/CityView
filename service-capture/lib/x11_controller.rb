@@ -10,11 +10,11 @@ module ServiceCapture
     end
 
     def key(keysym)
-      ServiceCapture::CommandRunner.run!(["xdotool", "key", "--delay", "20", keysym])
+      ServiceCapture::CommandRunner.run!(["xdotool", "key", "--delay", "10", keysym])
     end
 
     def type(text)
-      ServiceCapture::CommandRunner.run!(["xdotool", "type", "--delay", "20", text.to_s])
+      ServiceCapture::CommandRunner.run!(["xdotool", "type", "--delay", "10", text.to_s])
     end
 
     def mousemove(x, y)

@@ -1,5 +1,5 @@
 from airflow import DAG
-from datetime import datetime
+from datetime import timedelta, datetime
 import math
 from collections import defaultdict
 from create_tiles.capture_strategy import CaptureStrategy
@@ -30,8 +30,14 @@ from create_tiles.tasks.tile_cut_g import tile_cut_g
 from create_tiles.tasks.tile_merge_g import tile_merge_g
 from create_tiles.tasks.tile_compress_g import tile_compress_g
 
+default_args = {
+    "retries": 3,
+    "retry_delay": timedelta(minutes=5),
+}
+
 with DAG(
     dag_id='create_tiles',
+    default_args=default_args,
     catchup=False,
     start_date=datetime(2024, 1, 1),
     schedule=None,
