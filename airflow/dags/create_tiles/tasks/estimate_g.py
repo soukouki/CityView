@@ -16,12 +16,12 @@ def estimate_g(group: list, capture_results: list, estimate_results: list):
     for capture_result in capture_results:
         for xy_str, image_path in capture_result.items():
             x, y = parse_xy_str(xy_str)
-            print(f"  Capture result - coords: ({x}, {y}), image_path: {image_path}")
+            print(f"  coords: ({x}, {y}), image_path: {image_path}")
     print(f"Received {len(estimate_results)} estimate results")
     for estimate_result in estimate_results:
         for xy_str, coords in estimate_result.items():
-            x, y = xy_str
-            print(f"  Estimate result - coords: ({x}, {y}), estimated coords: ({coords['x']}, {coords['y']})")
+            x, y = parse_xy_str(xy_str)
+            print(f"  coords: ({x}, {y}), estimated coords: ({coords['x']}, {coords['y']})")
 
     # capture_resultsとestimate_resultsを辞書に変換しておく
     capture_dict = {}
@@ -32,10 +32,10 @@ def estimate_g(group: list, capture_results: list, estimate_results: list):
     estimate_dict = {}
     for estimate_result in estimate_results:
         for xy_str, coords in estimate_result.items():
-            x, y = xy_str
+            x, y = parse_xy_str(xy_str)
             estimate_dict[(x, y)] = coords
 
-    estimated_results = {}
+    estimated_results = {} # こちらのkeyは "x{X}_y{Y}" の形式にする(XComのため)
     for area in group:
         print(f"Estimating coords for x:{area['x']}, y:{area['y']}")
         image_path = capture_dict[(area['x'], area['y'])]
@@ -55,7 +55,7 @@ def estimate_g(group: list, capture_results: list, estimate_results: list):
             hint_x=hint_coord[0],
             hint_y=hint_coord[1]
         )
-        estimated_results[(area['x'], area['y'])] = estimated_coords
+        estimated_results[f"x{area['x']}_y{area['y']}"] = estimated_coords
         estimate_dict[(area['x'], area['y'])] = estimated_coords
 
     return estimated_results

@@ -8,6 +8,7 @@ SERVICE_TILE_CUT_URL = os.environ.get('SERVICE_TILE_CUT_URL', 'http://service-ti
 SERVICE_TILE_MERGE_URL = os.environ.get('SERVICE_TILE_MERGE_URL', 'http://service-tile-merge:5003')
 SERVICE_TILE_COMPRESS_URL = os.environ.get('SERVICE_TILE_COMPRESS_URL', 'http://service-tile-compress:5004')
 BACKEND_INTERNAL_URL = os.environ.get('BACKEND_INTERNAL_URL', 'http://backend:8002')
+STORAGE_URL = os.environ.get('STORAGE_URL', 'http://storage')
 
 # 環境変数からの設定
 PAKSET_SIZE = int(os.environ.get('PAKSET_SIZE', '128'))

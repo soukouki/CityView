@@ -14,6 +14,7 @@ x-airflow-common: &x-airflow-common
       SERVICE_TILE_MERGE_URL: http://service-tile-merge:5003
       SERVICE_TILE_COMPRESS_URL: http://service-tile-compress:5004
       BACKEND_INTERNAL_URL: http://backend:8002
+      STORAGE_URL: http://storage
       PAKSET_SIZE: ${PAKSET_SIZE}
       TILE_SIZE: ${TILE_SIZE}
       DELTA: ${DELTA}

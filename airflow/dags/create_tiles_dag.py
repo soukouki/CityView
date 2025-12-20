@@ -84,19 +84,22 @@ with DAG(
         needed_capture_tasks = []
         needed_estimate_tasks = []
 
+        gx = group[0]['x']
+        gy = group[0]['y']
+        # 同じエリアグループのcaptureタスクも必要
+        needed_capture_tasks.append(capture_tasks[f"capture_g_x{gx}_y{gy}"])
+
         for area in group:
             for comp in area['compare']:
                 belonging_group = areas_to_group[(comp['x'], comp['y'])]
-                gx = belonging_group[0]['x']
-                gy = belonging_group[0]['y']
-                if (gx, gy) in needed_tasks_gx_gy: # 重複チェック
+                gxb = belonging_group[0]['x']
+                gyb = belonging_group[0]['y']
+                if (gxb, gyb) in needed_tasks_gx_gy: # 重複チェック
                     continue
-                needed_tasks_gx_gy.append((gx, gy))
-                needed_capture_tasks.append(capture_tasks[f"capture_g_x{gx}_y{gy}"])
+                needed_tasks_gx_gy.append((gxb, gyb))
+                needed_capture_tasks.append(capture_tasks[f"capture_g_x{gxb}_y{gyb}"])
                 if belonging_group != group: # 自分自身のestimateは不要
-                    needed_estimate_tasks.append(estimate_tasks[f"estimate_g_x{gx}_y{gy}"])
-        gx = group[0]['x']
-        gy = group[0]['y']
+                    needed_estimate_tasks.append(estimate_tasks[f"estimate_g_x{gxb}_y{gyb}"])
         task_id = f"estimate_g_x{gx}_y{gy}"
         estimate_tasks[task_id] = estimate_g.override(
             task_id=f"estimate_g_x{gx}_y{gy}",
@@ -120,6 +123,7 @@ with DAG(
     actual_group_size = min(TILE_GROUP_SIZE, total_tiles_per_axis)
 
     # 各エリアのカバー範囲を事前計算し、空間インデックスを作成
+    print("Calculating area coverage for spatial indexing...")
     area_coverage = []
     for group in areas_groups:
         for area in group:
@@ -166,6 +170,7 @@ with DAG(
             })
 
     # タイル座標からカバーするエリアへの逆引きマップを作成
+    print("Building spatial index for tile to area mapping...")
     tile_to_areas = defaultdict(list)
     for cov in area_coverage:
         # このエリアがカバーするタイル範囲を列挙
@@ -173,87 +178,81 @@ with DAG(
             for ty in range(max(0, cov['tile_y_min']), min(total_tiles_per_axis, cov['tile_y_max'] + 1)):
                 tile_to_areas[(tx, ty)].append(cov)
 
+    # タイルをグループごとに整理（エリアが存在するタイルのみ）
+    print("Organizing tiles by group...")
+    tiles_by_group = defaultdict(list)
+    for (tile_x, tile_y), area_list in tile_to_areas.items():
+        # このタイルが所属するtile_cutグループを計算
+        group_x = (tile_x // actual_group_size) * actual_group_size
+        group_y = (tile_y // actual_group_size) * actual_group_size
+        
+        # グループごとにタイルとエリア情報を保存
+        tiles_by_group[(group_x, group_y)].append((tile_x, tile_y, area_list))
+
     # グループ化してタイル切り出しタスクを生成
+    print("Creating tile cut tasks...")
     tile_cut_tasks = {}
     tiles = {} # 後のタイルマージ用に記録しておく
-    for gx in range(0, total_tiles_per_axis, actual_group_size):
-        for gy in range(0, total_tiles_per_axis, actual_group_size):
-            # capture_gとestimate_gの結果をtile_cut_gの外で分解することはできないので、関数に渡してから分解する必要がある
-            # なので、具体的なtile_cut関数の引数の組み立てはtile_cut_gで行う
-            # しかし、すべての情報を与えると依存関係が増えすぎるので、必要なものだけを渡す
-            needed_tasks_gx_gy = []
-            needed_capture_tasks = []
-            needed_estimate_tasks = []
-            tasks = [] # tile_cut_gにおいて、どんなタスクを処理すれば良いのかを渡すための情報
+    for (gx, gy), tiles_in_group in tiles_by_group.items():
+        # capture_gとestimate_gの結果をtile_cut_gの外で分解することはできないので、関数に渡してから分解する必要がある
+        # なので、具体的なtile_cut関数の引数の組み立てはtile_cut_gで行う
+        # しかし、すべての情報を与えると依存関係が増えすぎるので、必要なものだけを渡す
+        needed_tasks_gx_gy = set()
+        needed_capture_tasks = []
+        needed_estimate_tasks = []
+        tasks = [] # tile_cut_gにおいて、どんなタスクを処理すれば良いのかを渡すための情報
 
-            for tx in range(gx, min(gx + actual_group_size, total_tiles_per_axis)):
-                for ty in range(gy, min(gy + actual_group_size, total_tiles_per_axis)):
-                    # このタイルをカバーするスクショ座標の範囲を計算
-                    screen_min = map_tile_to_screen_coord(tx, ty, MAX_Z)
-                    screen_max = map_tile_to_screen_coord(tx + 1, ty + 1, MAX_Z)
-                    screen_x_min = screen_min[0]
-                    screen_y_min = screen_min[1]
-                    screen_x_max = screen_max[0]
-                    screen_y_max = screen_max[1]
-                    
-                    # 空間インデックスから候補を取得し、正確な重なり判定のみ実行
-                    candidate_areas = tile_to_areas.get((tx, ty), [])
-                    covering_images = []
-                    
-                    for cov in candidate_areas:
-                        # 正確な重なり判定(念のため再確認)
-                        if not (cov['screen_x_max'] < screen_x_min or cov['screen_x_min'] > screen_x_max or
-                                cov['screen_y_max'] < screen_y_min or cov['screen_y_min'] > screen_y_max):
-                            covering_images.append({
-                                "x": cov['area']['x'],
-                                "y": cov['area']['y'],
-                            })
+        # エリアが存在するタイルだけをループ
+        for (tx, ty, candidate_areas) in tiles_in_group:
+            # 該当タイルをカバーする画像があれば、tile_cutタスク用の情報に追加する
+            images = []
+            for img in candidate_areas:
+                x = img['area']['x']
+                y = img['area']['y']
+                belonging_group = areas_to_group[(x, y)]
+                gxb = belonging_group[0]['x']
+                gyb = belonging_group[0]['y']
+                
+                # 依存タスクの登録（重複チェック付き）
+                if (gxb, gyb) not in needed_tasks_gx_gy:
+                    needed_tasks_gx_gy.add((gxb, gyb))
+                    needed_capture_tasks.append(capture_tasks[f"capture_g_x{gxb}_y{gyb}"])
+                    needed_estimate_tasks.append(estimate_tasks[f"estimate_g_x{gxb}_y{gyb}"])
+                
+                # 画像は常に追加（重複チェックとは独立）
+                images.append({
+                    "x": x, # tile_cut_g内で処理するための情報として渡すので、pathではなく座標のみ
+                    "y": y, # この座標はゲーム内タイル座標。estimate_gの結果からスクショ座標を取得してtile_cut_g内で処理する
+                })
 
-                    # 該当タイルをカバーする画像があれば、tile_cutタスク用の情報に追加する
-                    images = []
-                    for img in covering_images:
-                        belonging_group = areas_to_group[(img['x'], img['y'])]
-                        gxb = belonging_group[0]['x']
-                        gyb = belonging_group[0]['y']
-                        if (gxb, gyb) in needed_tasks_gx_gy: # 重複チェック
-                            continue
-                        needed_tasks_gx_gy.append((gxb, gyb))
-                        needed_capture_tasks.append(capture_tasks[f"capture_g_x{gxb}_y{gyb}"])
-                        needed_estimate_tasks.append(estimate_tasks[f"estimate_g_x{gxb}_y{gyb}"])
-                        images.append({
-                            "x": img['x'], # tile_cut_g内で処理するための情報として渡すので、pathではなく座標のみ
-                            "y": img['y'], # この座標はゲーム内タイル座標。estimate_gの結果からスクショ座標を取得してtile_cut_g内で処理する
-                        })
-
-                    # 画像が1つもないとき(=地図タイルがマップ外)はタスクを作らない
-                    if images == []:
-                        continue
-                    
-                    tasks.append({
-                        "x": tx,
-                        "y": ty,
-                        "images": images,
-                        "output_path": f"/images/rawtiles/{save_data_name}/{MAX_Z}/{tx}/{ty}.png",
-                    })
-        
-            # タスクが1つもないとき(=グループごとマップ外)はグループタスクを作らない
-            if len(needed_tasks_gx_gy) == 0:
+            # 画像が1つもないとき(=地図タイルがマップ外)はタスクを作らない
+            if images == []:
                 continue
+            
+            tasks.append({
+                "x": tx,
+                "y": ty,
+                "images": images,
+                "output_path": f"/images/rawtiles/{save_data_name}/{MAX_Z}/{tx}/{ty}.png",
+            })
+        
+        # タスクが1つもないとき(=グループごとマップ外)はグループタスクを作らない
+        if len(needed_tasks_gx_gy) == 0:
+            continue
 
-            task_id = f"tile_cut_g_z{MAX_Z}_gx{gx}_gy{gy}"
-            tile_cut_tasks[task_id] = tile_cut_g.override(
-                task_id=task_id,
-                queue="tile_cut",
-            )(
-                gx=gx,
-                gy=gy,
-                tasks=tasks,
-                capture_results=needed_capture_tasks,
-                estimate_results=needed_estimate_tasks,
-            )
+        task_id = f"tile_cut_g_z{MAX_Z}_gx{gx}_gy{gy}"
+        tile_cut_tasks[task_id] = tile_cut_g.override(
+            task_id=task_id,
+            queue="tile_cut",
+        )(
+            gx=gx,
+            gy=gy,
+            tasks=tasks,
+            capture_results=needed_capture_tasks,
+            estimate_results=needed_estimate_tasks,
+        )
 
     print(f"Total tile cut group tasks: {len(tile_cut_tasks)}")
-    exit()
 
     # # ---------- タイルマージタスク ----------
     # tile_merge_tasks = {}
