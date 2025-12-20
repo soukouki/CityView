@@ -1,5 +1,3 @@
-# tasks/tile_cut.py
-
 import requests
 from airflow.decorators import task
 from create_tiles.config import (
@@ -15,23 +13,18 @@ from create_tiles.config import (
 from create_tiles.utils import map_tile_to_screen_coord, parse_xy_str
 
 @task
-def tile_cut_g(gx: int, gy: int, related_areas: list, capture_results: list, estimate_results: list):
+def tile_cut_g(save_data_name: str, gx: int, gy: int, related_areas: list, capture_results: list, estimate_results: list):
     print(f"Processing tile cut group at ({gx}, {gy}) with {len(related_areas)} related areas")
     for area in related_areas:
         print(f"  Related area: x{area['x']}, y{area['y']}")
-    print(f"Received {len(related_areas)} related areas")
-    for area in related_areas:
-        print(f"  coords: ({area['x']}, {area['y']})")
-    print(f"Received {len(capture_results)} capture results")
     for capture_result in capture_results:
         for xy_str, image_path in capture_result.items():
             x, y = parse_xy_str(xy_str)
-            print(f"  coords: ({x}, {y}), image_path: {image_path}")
-    print(f"Received {len(estimate_results)} estimate results")
+            print(f"  Capture result - coords: ({x}, {y}), image_path: {image_path}")
     for estimate_result in estimate_results:
         for xy_str, coords in estimate_result.items():
             x, y = parse_xy_str(xy_str)
-            print(f"  coords: ({x}, {y}), estimated coords: ({coords['x']}, {coords['y']})")
+            print(f"  Estimate result - coords: ({x}, {y}), estimated coords: ({coords['x']}, {coords['y']})")
 
     # capture_resultsとestimate_resultsを辞書に変換しておく
     capture_dict = {}
@@ -64,6 +57,7 @@ def tile_cut_g(gx: int, gy: int, related_areas: list, capture_results: list, est
         })
 
     # グループ内の各タイルを処理
+    cut_tiles = {}
     for tx in range(gx, gx + TILE_GROUP_SIZE):
         for ty in range(gy, gy + TILE_GROUP_SIZE):
             # このタイルのスクリーン座標範囲を計算
@@ -94,13 +88,16 @@ def tile_cut_g(gx: int, gy: int, related_areas: list, capture_results: list, est
             if not images:
                 continue
             
-            output_path = f"/images/rawtiles/{MAX_Z}/{tx}/{ty}.png"
+            output_path = f"/images/rawtiles/{save_data_name}/{MAX_Z}/{tx}/{ty}.png"
             tile_cut(
                 x=tx,
                 y=ty,
                 images=images,
                 output_path=output_path
             )
+            cut_tiles[f"z{MAX_Z}_x{tx}_y{ty}"] = output_path
+
+    return cut_tiles
 
 def tile_cut(x: int, y: int, images: list, output_path: str):
     url = f"{SERVICE_TILE_CUT_URL}/cut"

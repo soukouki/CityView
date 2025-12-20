@@ -50,3 +50,11 @@ def parse_xy_str(xy_str: str) -> tuple[int, int]:
     x = int(x_str[1:])
     y = int(y_str[1:])
     return x, y
+
+# z12_x123_y456形式の文字列を分解する
+def parse_zxy_str(zxy_str: str) -> tuple[int, int, int]:
+    z_str, x_str, y_str = zxy_str.split('_')
+    z = int(z_str[1:])
+    x = int(x_str[1:])
+    y = int(y_str[1:])
+    return z, x, y

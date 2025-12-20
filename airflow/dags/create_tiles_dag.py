@@ -180,11 +180,36 @@ with DAG(
             for gy in range(group_y_min, group_y_max + 1, actual_group_size):
                 group_to_areas[(gx, gy)].add((cov['area']['x'], cov['area']['y']))
 
+    # 各ズームレベルで存在するグループを計算
+    print("Calculating existing groups for each zoom level...")
+    existing_groups = {}
+    existing_groups[MAX_Z] = set(group_to_areas.keys())
+    
+    for z in range(MAX_Z - 1, -1, -1):
+        existing_groups[z] = set()
+        for (cgx, cgy) in existing_groups[z + 1]:
+            # 子グループのタイル範囲 → 親タイル範囲
+            parent_tile_x_min = cgx // 2
+            parent_tile_y_min = cgy // 2
+            parent_tile_x_max = (cgx + actual_group_size - 1) // 2
+            parent_tile_y_max = (cgy + actual_group_size - 1) // 2
+            
+            # 親タイル範囲 → 親グループ範囲
+            parent_group_x_min = (parent_tile_x_min // actual_group_size) * actual_group_size
+            parent_group_y_min = (parent_tile_y_min // actual_group_size) * actual_group_size
+            parent_group_x_max = (parent_tile_x_max // actual_group_size) * actual_group_size
+            parent_group_y_max = (parent_tile_y_max // actual_group_size) * actual_group_size
+            
+            # 親グループを登録
+            for pgx in range(parent_group_x_min, parent_group_x_max + 1, actual_group_size):
+                for pgy in range(parent_group_y_min, parent_group_y_max + 1, actual_group_size):
+                    existing_groups[z].add((pgx, pgy))
+
     # グループ化してタイル切り出しタスクを生成
     print("Creating tile cut tasks...")
     tile_cut_tasks = {}
-    tiles = {} # 後のタイルマージ用に記録しておく
-    for (gx, gy), area_coords_set in group_to_areas.items():
+    for (gx, gy) in existing_groups[MAX_Z]:
+        area_coords_set = group_to_areas[(gx, gy)]
         # capture_gとestimate_gの結果をtile_cut_gの外で分解することはできないので、関数に渡してから分解する必要がある
         # なので、具体的なtile_cut関数の引数の組み立てはtile_cut_gで行う
         # しかし、すべての情報を与えると依存関係が増えすぎるので、必要なものだけを渡す
@@ -212,6 +237,7 @@ with DAG(
             task_id=task_id,
             queue="tile_cut",
         )(
+            save_data_name=save_data_name,
             gx=gx,
             gy=gy,
             related_areas=related_areas,
@@ -221,114 +247,89 @@ with DAG(
 
     print(f"Total tile cut group tasks: {len(tile_cut_tasks)}")
 
+    # ---------- タイルマージタスク ----------
+    print("Creating tile merge tasks...")
+    tile_merge_tasks = {}
+    for z in range(MAX_Z - 1, -1, -1):
+        for (gx, gy) in existing_groups[z]:
+            child_results = []
+            child_z = z + 1
+            
+            # 4つの子グループ座標を計算
+            child_coords = [
+                (gx * 2, gy * 2),
+                (gx * 2 + actual_group_size, gy * 2),
+                (gx * 2, gy * 2 + actual_group_size),
+                (gx * 2 + actual_group_size, gy * 2 + actual_group_size),
+            ]
+            
+            for (cgx, cgy) in child_coords:
+                if child_z == MAX_Z:
+                    child_task_id = f"tile_cut_g_z{child_z}_gx{cgx}_gy{cgy}"
+                    if child_task_id in tile_cut_tasks:
+                        child_results.append(tile_cut_tasks[child_task_id])
+                else:
+                    child_task_id = f"tile_merge_g_z{child_z}_gx{cgx}_gy{cgy}"
+                    if child_task_id in tile_merge_tasks:
+                        child_results.append(tile_merge_tasks[child_task_id])
+            
+            # 子タスクが1つもなければスキップ
+            if len(child_results) == 0:
+                continue
+            
+            task_id = f"tile_merge_g_z{z}_gx{gx}_gy{gy}"
+            tile_merge_tasks[task_id] = tile_merge_g.override(
+                task_id=task_id,
+                queue="tile_merge",
+            )(
+                save_data_name=save_data_name,
+                z=z,
+                gx=gx,
+                gy=gy,
+                child_results=child_results,
+            )
 
-    # # ---------- タイルマージタスク ----------
-    # tile_merge_tasks = {}
-    # for z in range(MAX_Z - 1, -1, -1): # MAX_Z-1から0まで
-    #     tiles_per_axis = 2 ** MAX_Z
-    #     for gx in range(0, tiles_per_axis, TILE_GROUP_SIZE):
-    #         for gy in range(0, tiles_per_axis, TILE_GROUP_SIZE):
-    #             tasks_in_group = []
-    #             for tx in range(gx, gx + TILE_GROUP_SIZE, 1):
-    #                 for ty in range(gy, gy + TILE_GROUP_SIZE, 1):
-    #                     merge_tiles = []
-    #                     positions = ["top-left", "bottom-left", "top-right", "bottom-right"]
-    #                     for dx in range(2):
-    #                         for dy in range(2):
-    #                             child_z = z + 1
-    #                             child_x = tx * 2 + dx
-    #                             child_y = ty * 2 + dy
-    #                             if (child_z, child_x, child_y) in tiles:
-    #                                 merge_tiles.append({
-    #                                     "path": f"/images/rawtiles/{save_data_name}/{child_z}/{child_x}/{child_y}.png",
-    #                                     "position": positions[dx * 2 + dy],
-    #                                 })
-    #                     if len(merge_tiles) == 0:
-    #                         continue
-    #                     tasks_in_group.append({
-    #                         "tiles": merge_tiles,
-    #                         "output_path": f"/images/rawtiles/{save_data_name}/{z}/{tx}/{ty}.png",
-    #                     })
-    #                     tiles[(z, tx, ty)] = True
-    #             if len(tasks_in_group) == 0:
-    #                 continue
-    #             task_id = f"tile_merge_g_z{z}_gx{gx}_gy{gy}"
-    #             tile_merge_tasks[task_id] = tile_merge_g.override(task_id=task_id, queue="tile_merge")(
-    #                 tasks=tasks_in_group,
-    #             )
+    print(f"Total tile merge tasks: {len(tile_merge_tasks)}")
 
-    # # 依存関係の設定
-    # # 最大ズーム-1ならtile_cutタスクから、それ以外は下位のtile_mergeタスクから依存関係を設定
-    # for task_id, _ in tile_merge_tasks.items():
-    #     parts = task_id.split('_')
-    #     z = int(parts[3][1:])
-    #     gx = int(parts[4][2:])
-    #     gy = int(parts[5][2:])
-    #     child_coords = []
-    #     for tx in range(gx, gx + TILE_GROUP_SIZE, 1):
-    #         for ty in range(gy, gy + TILE_GROUP_SIZE, 1):
-    #             child_coords.append((z + 1, tx * 2, ty * 2))
-    #     if z + 1 == MAX_Z:
-    #         for coord in child_coords:
-    #             child_task_id = f"tile_cut_g_z{z+1}_gx{(coord[1]//TILE_GROUP_SIZE)*TILE_GROUP_SIZE}_gy{(coord[2]//TILE_GROUP_SIZE)*TILE_GROUP_SIZE}"
-    #             if child_task_id in tile_cut_tasks:
-    #                 tile_cut_tasks[child_task_id] >> tile_merge_tasks[task_id]
-    #     else:
-    #         for coord in child_coords:
-    #             child_task_id = f"tile_merge_g_z{z+1}_gx{(coord[1]//TILE_GROUP_SIZE)*TILE_GROUP_SIZE}_gy{(coord[2]//TILE_GROUP_SIZE)*TILE_GROUP_SIZE}"
-    #             if child_task_id in tile_merge_tasks:
-    #                 tile_merge_tasks[child_task_id] >> tile_merge_tasks[task_id]
-
-    # print(f"Total tile merge tasks: {len(tile_merge_tasks)}")
-
-    # # ---------- タイル圧縮タスク ----------
-    # tile_compress_tasks = {}
-    # # tile_cutタスクに対応する圧縮タスクを作成
-    # for task_id, _ in tile_cut_tasks.items():
-    #     parts = task_id.split('_') # 例: tile_cut_g_z{z}_gx{gx}_gy{gy}
-    #     z = int(parts[3][1:])
-    #     gx = int(parts[4][2:])
-    #     gy = int(parts[5][2:])
-    #     tasks_in_group = []
-    #     # tilesを参照して、そのグループに存在するタイルを列挙
-    #     for tx in range(gx, gx + TILE_GROUP_SIZE):
-    #         for ty in range(gy, gy + TILE_GROUP_SIZE):
-    #             if (z, tx, ty) in tiles:
-    #                 tasks_in_group.append({
-    #                     "input_path": f"/images/rawtiles/{save_data_name}/{z}/{tx}/{ty}.png",
-    #                     "output_path": f"/images/tiles/{save_data_name}/{z}/{tx}/{ty}.avif",
-    #                 })
-    #     if len(tasks_in_group) == 0:
-    #         continue
-    #     compress_task_id = f"tile_compress_g_z{z}_gx{gx}_gy{gy}"
-    #     tile_compress_tasks[compress_task_id] = tile_compress_g.override(task_id=compress_task_id, queue="tile_compress")(
-    #         tasks=tasks_in_group,
-    #     )
-    #     # 依存関係の設定
-    #     tile_cut_tasks[task_id] >> tile_compress_tasks[compress_task_id]
+    # ---------- タイル圧縮タスク ----------
+    print("Creating tile compress tasks...")
+    tile_compress_tasks = {}
     
-    # # tile_mergeタスクに対応する圧縮タスクを作成
-    # for task_id, _ in tile_merge_tasks.items():
-    #     parts = task_id.split('_') # 例: tile_merge_g_z{z}_gx{gx}_gy{gy}
-    #     z = int(parts[3][1:])
-    #     gx = int(parts[4][2:])
-    #     gy = int(parts[5][2:])
-    #     tasks_in_group = []
-    #     # tilesを参照して、そのグループに存在するタイルを列挙
-    #     for tx in range(gx, gx + TILE_GROUP_SIZE):
-    #         for ty in range(gy, gy + TILE_GROUP_SIZE):
-    #             if (z, tx, ty) in tiles:
-    #                 tasks_in_group.append({
-    #                     "input_path": f"/images/rawtiles/{save_data_name}/{z}/{tx}/{ty}.png",
-    #                     "output_path": f"/images/tiles/{save_data_name}/{z}/{tx}/{ty}.avif",
-    #                 })
-    #     if len(tasks_in_group) == 0:
-    #         continue
-    #     compress_task_id = f"tile_compress_g_z{z}_gx{gx}_gy{gy}"
-    #     tile_compress_tasks[compress_task_id] = tile_compress_g.override(task_id=compress_task_id, queue="tile_compress")(
-    #         tasks=tasks_in_group,
-    #     )
-    #     # 依存関係の設定
-    #     tile_merge_tasks[task_id] >> tile_compress_tasks[compress_task_id]
+    # z=MAX_Zはtile_cut_gから
+    for (gx, gy) in existing_groups[MAX_Z]:
+        task_id = f"tile_cut_g_z{MAX_Z}_gx{gx}_gy{gy}"
+        if task_id not in tile_cut_tasks:
+            continue
+        
+        compress_task_id = f"tile_compress_g_z{MAX_Z}_gx{gx}_gy{gy}"
+        tile_compress_tasks[compress_task_id] = tile_compress_g.override(
+            task_id=compress_task_id,
+            queue="tile_compress",
+        )(
+            save_data_name=save_data_name,
+            z=MAX_Z,
+            gx=gx,
+            gy=gy,
+            tile_results=tile_cut_tasks[task_id],
+        )
+    
+    # z=MAX_Z-1〜0はtile_merge_gから
+    for z in range(MAX_Z - 1, -1, -1):
+        for (gx, gy) in existing_groups[z]:
+            task_id = f"tile_merge_g_z{z}_gx{gx}_gy{gy}"
+            if task_id not in tile_merge_tasks:
+                continue
+            
+            compress_task_id = f"tile_compress_g_z{z}_gx{gx}_gy{gy}"
+            tile_compress_tasks[compress_task_id] = tile_compress_g.override(
+                task_id=compress_task_id,
+                queue="tile_compress",
+            )(
+                save_data_name=save_data_name,
+                z=z,
+                gx=gx,
+                gy=gy,
+                tile_results=tile_merge_tasks[task_id],
+            )
 
-    # print(f"Total compress tile group tasks: {len(tile_compress_tasks)}")
+    print(f"Total tile compress tasks: {len(tile_compress_tasks)}")
