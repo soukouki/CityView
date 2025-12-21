@@ -913,29 +913,12 @@ GET http://backend:8000/tiles/1/10/21.avif
 
 ## 5. スケーリングとパフォーマンス
 
-### 5.1 並列度の設定
-システム全体の並列度は以下のとおりです。すべてのコンポーネントを統一した並列度（レプリカ数）で配置します。
-
-| コンポーネント | レプリカ数 | キュー/役割 |
-|---|---:|---|
-| airflow-worker-capture | 2 | capture キュー処理 |
-| airflow-worker-estimate | 2 | estimate キュー処理 |
-| airflow-worker-tile-cut | 2 | tile_cut キュー処理 |
-| airflow-worker-tile-merge | 2 | tile_merge キュー処理 |
-| airflow-worker-tile-compress | 2 | tile_compress キュー処理 |
-| airflow-worker-tile-cleanup | 2 | tile_cleanup キュー処理 |
-| airflow-worker-capture-cleanup | 2 | screenshot_cleanup キュー処理 |
-| service-capture | 2 | スクリーンショット撮影 |
-| service-estimate | 2 | 座標推定 |
-| service-tile-cut | 2 | タイル切り出し |
-| service-tile-merge | 2 | タイルマージ |
-| service-tile-compress | 2 | タイル圧縮 |
-
-### 5.2 ボトルネック対策
+### 5.1 ボトルネック対策
 
 #### スクリーンショット撮影
 - ゲーム起動に時間がかかるため、撮影スループットがボトルネック。
 - 対策: `service-capture` と `airflow-worker-capture` のレプリカ数を確保し、並列度を維持。
+- 対策: スクリーンショットの撮影とクリップ、保存を非同期化し、限られたゲームプロセスでも高スループットを実現。
 
 #### タイル処理
 - 最大ズームレベルでは数十万〜数百万のタイルを処理するため、タイル切り出し・マージ・圧縮がボトルネック。
@@ -948,7 +931,7 @@ GET http://backend:8000/tiles/1/10/21.avif
 #### タイル配信
 - CDN導入を検討。複数のBackendインスタンスで負荷分散。
 
-### 5.3 ストレージ最適化
+### 5.2 ストレージ最適化
 
 #### 段階的な削除戦略
 - **未圧縮タイル**: 圧縮完了後およびマージ完了後に即座に削除

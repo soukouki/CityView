@@ -11,7 +11,7 @@ from create_tiles.config import (
     IMAGE_MARGIN_WIDTH,
     IMAGE_MARGIN_HEIGHT,
 )
-from create_tiles.utils import map_tile_to_screen_coord, parse_xy_str
+from create_tiles.utils import map_tile_to_screen_coord, parse_xy_str, check_exists
 
 @task
 def tile_cut_g(gx: int, gy: int, related_areas: list, capture_results: list, estimate_results: list):
@@ -95,6 +95,10 @@ def tile_cut_g(gx: int, gy: int, related_areas: list, capture_results: list, est
                 continue
             
             output_path = f"/images/rawtiles/{save_data_name}/{MAX_Z}/{tx}/{ty}.png"
+            if check_exists(output_path):
+                print(f"  Output already exists at {output_path}, skipping tile cut.")
+                cut_tiles[f"z{MAX_Z}_x{tx}_y{ty}"] = output_path
+                continue
             tile_cut(
                 x=tx,
                 y=ty,

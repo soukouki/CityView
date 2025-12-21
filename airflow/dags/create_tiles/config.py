@@ -28,9 +28,7 @@ ZOOM_LEVEL = os.environ.get('ZOOM_LEVEL', 'normal')
 # ZOOM_LEVELはquarter, half, normal, doubleのいずれか
 if ZOOM_LEVEL not in ['quarter', 'half', 'normal', 'double']:
     raise ValueError('Invalid ZOOM_LEVEL value')
-
-# タイルグループ化のサイズ
-TILE_GROUP_SIZE = 64
+TILE_GROUP_SIZE = int(os.environ.get('TILE_GROUP_SIZE', '64'))
 
 # その他
 max_width = (ADJUSTED_PAKSIZE // 2) * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_WIDTH * 4 # 余裕を持ってマージンを倍に見ておく

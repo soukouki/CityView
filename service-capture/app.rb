@@ -68,6 +68,11 @@ module ServiceCapture
       x11_controller: X11_CONTROLLER,
     )
 
+    # Worker pool for parallel screenshot processing
+    WORKER_POOL = Concurrent::FixedThreadPool.new(
+      ENV.fetch("CAPTURE_WORKER_THREADS", "8").to_i
+    )
+
     SCREENSHOT = ServiceCapture::ScreenshotService.new(
       storage_client: STORAGE,
       crop_width: ENV.fetch("CAPTURE_CROP_WIDTH").to_i,
@@ -75,6 +80,13 @@ module ServiceCapture
       crop_offset_x: ENV.fetch("CAPTURE_CROP_OFFSET_X", "256").to_i,
       crop_offset_y: ENV.fetch("CAPTURE_CROP_OFFSET_Y", "64").to_i,
       x11_controller: X11_CONTROLLER,
+      worker_pool: WORKER_POOL,
+      capture_lock: CAPTURE_LOCK,
+      redraw_wait: ENV.fetch("CAPTURE_REDRAW_WAIT_SECONDS", "0.2").to_f,
+      scrot_settle: ENV.fetch("CAPTURE_SCROT_SETTLE_SECONDS", "0.3").to_f,
+      scrot_timeout: ENV.fetch("CAPTURE_SCROT_TIMEOUT_SECONDS", "30").to_i,
+      crop_timeout: ENV.fetch("CAPTURE_CROP_TIMEOUT_SECONDS", "30").to_i,
+      upload_timeout: ENV.fetch("CAPTURE_UPLOAD_TIMEOUT_SECONDS", "30").to_i,
     )
 
     # TTL watcher (best-effort)
@@ -90,7 +102,7 @@ module ServiceCapture
     end
 
     # POST /capture
-    # request: { "save_data_name": "...", "x": 0, "y": 0, "output_path": "..." }
+    # request: { "save_data_name": "...", "x": 0, "y": 0, "output_path": "...", "zoom_level": "..." }
     # response: { "status": "ok" }
     post "/capture" do
       payload = parse_json_body!
@@ -117,24 +129,22 @@ module ServiceCapture
         halt 400, json(error: "invalid_zoom_level", message: "zoom_level must be one of quarter, half, normal, double")
       end
 
-      # Only one capture at a time per container.
-      result = nil
+      # Ensure game process for this save is running (restart if save differs).
       CAPTURE_LOCK.synchronize do
-        # Ensure game process for this save is running (restart if save differs).
         GAME_MANAGER.ensure_running(save_data_name)
-
-        image_path = SCREENSHOT.capture!(
-          output_path:,
-          x:,
-          y:,
-          zoom_level:,
-        )
-
-        GAME_MANAGER.touch
-        result = { status: "success" }
       end
 
-      json(result)
+      # Screenshot service handles locking internally for optimal parallelization
+      image_path = SCREENSHOT.capture!(
+        output_path:,
+        x:,
+        y:,
+        zoom_level:,
+      )
+
+      GAME_MANAGER.touch
+      
+      json(status: "success")
     rescue ServiceCapture::Errors::BadRequest => e
       warn "[/capture] bad_request msg=#{e.message}"
       halt 400, json(error: e.code, message: e.message)

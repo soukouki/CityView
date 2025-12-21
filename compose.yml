@@ -26,6 +26,7 @@ x-airflow-common: &x-airflow-common
       IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
       TILE_QUALITY_MAX_ZOOM: ${TILE_QUALITY_MAX_ZOOM}
       TILE_QUALITY_OTHER: ${TILE_QUALITY_OTHER}
+      TILE_GROUP_SIZE: 64
       TZ: ${TZ}
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
@@ -131,7 +132,7 @@ services:
   # --- Airflow Worker Layer ---
   airflow-worker-capture:
     <<: *x-airflow-common
-    command: celery worker -q capture --concurrency 2
+    command: celery worker -q capture --concurrency 6 # スクショ撮影内部での並列処理があるため、concurrencyは多めに設定
     deploy:
       replicas: 2
 
@@ -143,7 +144,7 @@ services:
 
   airflow-worker-tile-cut:
     <<: *x-airflow-common
-    command: celery worker -q tile_cut --concurrency 2
+    command: celery worker -q tile_cut --concurrency 4
     deploy:
       replicas: 2
 
@@ -185,6 +186,12 @@ services:
       CAPTURE_CROP_HEIGHT: ${IMAGE_HEIGHT}
       CAPTURE_CROP_OFFSET_X: ${CROP_OFFSET_X}
       CAPTURE_CROP_OFFSET_Y: ${CROP_OFFSET_Y}
+      CAPTURE_REDRAW_WAIT_SECONDS: 0.3 # ズームレベルが低い場合は描画に時間がかかることがあるため長めに設定すること
+      CAPTURE_SCROT_SETTLE_SECONDS: 0.3
+      CAPTURE_SCROT_TIMEOUT_SECONDS: 30
+      CAPTURE_CROP_TIMEOUT_SECONDS: 30
+      CAPTURE_UPLOAD_TIMEOUT_SECONDS: 30
+      CAPTURE_WORKER_THREADS: 4 # スクショ撮影・クリップ・アップロードを並列化するためのスレッド数
       CAPTURE_TTL_SECONDS: 300 # GAME_CAPTURE_TIMEOUT_SECONDSより長く設定すること
       GAME_BOOT_TIMEOUT_SECONDS: 300 # 大規模マップの場合は起動に時間がかかることがあるため長めに設定すること
       GAME_BOOT_POLL_INTERVAL_SECONDS: 5
@@ -227,11 +234,15 @@ services:
     environment:
       STORAGE_URL: http://storage
       TILE_SIZE: ${TILE_SIZE}
-      CACHE_TTL: 60
+      # これを上げるとめちゃくちゃメモリ消費が増えるので注意。(1につき1GB増えるイメージ)
+      # コンテナ間通信のオーバーヘッドが気になって避けてたけれど、あまりにもメモリを食うので0にした。
+      MAX_CACHE_ENTRIES: 0
+      CACHE_MAX_AGE: 300
+      CLEANUP_INTERVAL: 30
     volumes:
       - ./volume-storage:/data
     deploy:
-      replicas: 2
+      replicas: 4
     restart: unless-stopped
 
   service-tile-merge:

@@ -1,7 +1,8 @@
 import requests
 from airflow.operators.python import get_current_context
 from airflow.decorators import task
-from create_tiles.config import SERVICE_CAPTURE_URL, STORAGE_URL, ZOOM_LEVEL
+from create_tiles.config import SERVICE_CAPTURE_URL, ZOOM_LEVEL
+from create_tiles.utils import check_exists
 
 @task
 def capture_g(tasks: list):
@@ -29,12 +30,6 @@ def capture_g(tasks: list):
         )
         captured_results[f"x{x}_y{y}"] = output_path
     return captured_results
-
-# ストレージにすでに存在するかを確認する
-def check_exists(output_path: str) -> bool:
-    url = f"{STORAGE_URL}{output_path}"
-    response = requests.head(url)
-    return response.status_code == 200
 
 def capture(save_data_name: str, x: int, y: int, output_path: str):
     url = f"{SERVICE_CAPTURE_URL}/capture"

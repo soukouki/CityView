@@ -1,3 +1,4 @@
+import requests
 from .config import (
     ADJUSTED_PAKSIZE,
     IMAGE_MARGIN_WIDTH,
@@ -7,6 +8,7 @@ from .config import (
     MAP_TILES_Y,
     TILE_SIZE,
     MAX_Z,
+    STORAGE_URL,
 )
 
 # ゲーム内タイル座標系とスクショ座標系の変換式
@@ -58,3 +60,9 @@ def parse_zxy_str(zxy_str: str) -> tuple[int, int, int]:
     x = int(x_str[1:])
     y = int(y_str[1:])
     return z, x, y
+
+# ストレージにすでに存在するかを確認する
+def check_exists(output_path: str) -> bool:
+    url = f"{STORAGE_URL}{output_path}"
+    response = requests.head(url)
+    return response.status_code == 200
