@@ -11,7 +11,7 @@ BACKEND_INTERNAL_URL = os.environ.get('BACKEND_INTERNAL_URL', 'http://backend:80
 STORAGE_URL = os.environ.get('STORAGE_URL', 'http://storage')
 
 # 環境変数からの設定
-PAKSET_SIZE = int(os.environ.get('PAKSET_SIZE', '128'))
+ADJUSTED_PAKSIZE = int(os.environ.get('ADJUSTED_PAKSIZE', '128'))
 TILE_SIZE = int(os.environ.get('TILE_SIZE', '512'))
 DELTA = int(os.environ.get('DELTA', '40'))
 MAP_TILES_X = int(os.environ.get('MAP_TILES_X', '512'))
@@ -24,11 +24,15 @@ ENABLE_WIDTH = IMAGE_WIDTH - 2 * IMAGE_MARGIN_WIDTH
 ENABLE_HEIGHT = IMAGE_HEIGHT - 2 * IMAGE_MARGIN_HEIGHT
 TILE_QUALITY_MAX_ZOOM = os.environ.get('TILE_QUALITY_MAX_ZOOM', '60') # int or "lossless"
 TILE_QUALITY_OTHER = os.environ.get('TILE_QUALITY_OTHER', '30')
+ZOOM_LEVEL = os.environ.get('ZOOM_LEVEL', 'normal')
+# ZOOM_LEVELはquarter, half, normal, doubleのいずれか
+if ZOOM_LEVEL not in ['quarter', 'half', 'normal', 'double']:
+    raise ValueError('Invalid ZOOM_LEVEL value')
 
 # タイルグループ化のサイズ
 TILE_GROUP_SIZE = 64
 
 # その他
-max_width = PAKSET_SIZE * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_WIDTH * 4
-max_height = (PAKSET_SIZE // 2) * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_HEIGHT * 2
-MAX_Z = math.ceil(math.log2(max(max_width, max_height) / TILE_SIZE))
+max_width = (ADJUSTED_PAKSIZE // 2) * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_WIDTH * 4 # 余裕を持ってマージンを倍に見ておく
+max_height = (ADJUSTED_PAKSIZE // 4) * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_HEIGHT * 2
+MAX_Z = math.ceil(math.log2(max(max_width, max_height) / TILE_SIZE)) + 2

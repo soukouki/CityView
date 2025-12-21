@@ -9,15 +9,16 @@ from create_tiles.utils import parse_zxy_str
 def tile_merge_g(z: int, gx: int, gy: int, child_results: list):
     save_data_name = get_current_context()['params']['save_data_name']
     print(f"Processing tile merge group at z={z}, ({gx}, {gy}) with {len(child_results)} child results")
+    for child_result in child_results:
+        print(" Child result:")
+        for key, path in child_result.items():
+            cz, cx, cy = parse_zxy_str(key)
+            print(f"  Child tile - z:{cz}, x:{cx}, y:{cy}, path: {path}")
     
     # child_resultsは辞書のリスト。1つの辞書にマージ
     child_tiles = {}
     for result in child_results:
         child_tiles.update(result)
-    
-    print(f"Total child tiles: {len(child_tiles)}")
-    for key, path in child_tiles.items():
-        print(f"  Child tile: {key} -> {path}")
 
     merged_tiles = {}
     for tx in range(gx, gx + TILE_GROUP_SIZE):

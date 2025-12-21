@@ -15,21 +15,24 @@ module ServiceCapture
       @crop_offset_x = crop_offset_x
       @crop_offset_y = crop_offset_y
       @x11_controller = x11_controller
+      @current_zoom_level = "normal" # quarter, half, normal or double
 
       FileUtils.mkdir_p("/tmp/service-capture")
     end
 
-    def capture!(output_path:, x:, y:)
+    def capture!(output_path:, x:, y:, zoom_level:)
       screenshot_id = "#{self.class.normalize_component(output_path.split("/").last)}_#{Time.now.strftime("%Y%m%d%H%M%S")}_#{rand(1000)}"
-      raw_path = "/tmp/service-capture/#{screenshot_id}_raw}.png"
+      raw_path = "/tmp/service-capture/#{screenshot_id}_raw.png"
       cropped_path = "/tmp/service-capture/#{screenshot_id}_cropped.png"
 
       # Move, hide cursor, wait a little for redraw, then screenshot.
-      puts "Taking a screenshot at x=#{x}, y=#{y}"
+      puts "Taking a screenshot at x=#{x}, y=#{y}, zoom=#{zoom_level}"
       puts "mousemove_to_center()"
       @x11_controller.mousemove_to_center
       puts "move_to_coordinate(#{x}, #{y})"
       @x11_controller.move_to_coordinate(x, y)
+      puts "change zoom level from #{@current_zoom_level} to #{zoom_level}"
+      zoom!(zoom_level)
       puts "hide_cursor()"
       @x11_controller.hide_cursor(map_x: x, map_y: y)
       puts "sleep"
@@ -64,6 +67,49 @@ module ServiceCapture
       s = "unknown" if s.empty?
       # keep alnum, dash, underscore; replace others with '-'
       s.gsub(/[^0-9A-Za-z_\-]/, "-")[0, 80]
+    end
+
+    private
+
+    # 愚直に書きすぎたかもしれない
+    def zoom!(level)
+      case [@current_zoom_level, level] # [from, to]
+      when ["quarter", "quarter"]
+        # no-op
+      when ["quarter", "half"]
+        @x11_controller.zoom_in
+      when ["quarter", "normal"]
+        2.times { @x11_controller.zoom_in }
+      when ["quarter", "double"]
+        3.times { @x11_controller.zoom_in }
+      when ["half", "quarter"]
+        @x11_controller.zoom_out
+      when ["half", "half"]
+        # no-op
+      when ["half", "normal"]
+        @x11_controller.zoom_in
+      when ["half", "double"]
+        2.times { @x11_controller.zoom_in }
+      when ["normal", "quarter"]
+        2.times { @x11_controller.zoom_out }
+      when ["normal", "half"]
+        @x11_controller.zoom_out
+      when ["normal", "normal"]
+        # no-op
+      when ["normal", "double"]
+        @x11_controller.zoom_in
+      when ["double", "quarter"]
+        3.times { @x11_controller.zoom_out }
+      when ["double", "half"]
+        2.times { @x11_controller.zoom_out }
+      when ["double", "normal"]
+        @x11_controller.zoom_out
+      when ["double", "double"]
+        # no-op
+      else
+        raise "invalid zoom level transition: from=#{@current_zoom_level} to=#{level}"
+      end
+      @current_zoom_level = level
     end
   end
 end

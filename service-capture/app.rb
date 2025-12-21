@@ -57,7 +57,6 @@ module ServiceCapture
       # Host expects binaries mounted at /app/bin by compose
       executable_dir: ENV.fetch("GAME_EXECUTABLE_DIR", "/app/bin"),
       pakset_name: ENV.fetch("PAKSET_NAME"),
-      pakset_size: ENV.fetch("PAKSET_SIZE").to_i,
       display: ENV.fetch("DISPLAY", ":99"),
       screen_width: ENV.fetch("CAPTURE_SCREEN_WIDTH").to_i,
       screen_height: ENV.fetch("CAPTURE_SCREEN_HEIGHT").to_i,
@@ -95,7 +94,7 @@ module ServiceCapture
     # response: { "status": "ok" }
     post "/capture" do
       payload = parse_json_body!
-      require_fields!(payload, :save_data_name, :x, :y)
+      require_fields!(payload, :save_data_name, :x, :y, :output_path, :zoom_level)
 
       save_data_name = payload["save_data_name"].to_s
       if save_data_name.empty?
@@ -113,6 +112,10 @@ module ServiceCapture
       if output_path.empty?
         halt 400, json(error: "invalid_output_path", message: "output_path cannot be empty")
       end
+      zoom_level = payload["zoom_level"]
+      if !["quarter", "half", "normal", "double"].include?(zoom_level)
+        halt 400, json(error: "invalid_zoom_level", message: "zoom_level must be one of quarter, half, normal, double")
+      end
 
       # Only one capture at a time per container.
       result = nil
@@ -123,7 +126,8 @@ module ServiceCapture
         image_path = SCREENSHOT.capture!(
           output_path:,
           x:,
-          y:
+          y:,
+          zoom_level:,
         )
 
         GAME_MANAGER.touch

@@ -366,7 +366,8 @@
 
   | メソッド | パス | 説明 | リクエスト | レスポンス |
   |---|---|---|---|---|
-  | POST | `/capture` | スクリーンショット撮影 | `{"save_data_name": "string", "x": 0, "y": 0, "output_path": "string"}` | `{"status": "ok"}` |
+  | POST | `/capture` | スクリーンショット撮影 | `{"save_data_name": "string", "x": 0, "y": 0, "output_path": "string", "zoom_level": "string}` | `{"status": "ok"}` |
+  - `zoom_level` : `"quarter"`, `"half"`, `"normal"`, `"double"`のいずれか
 
 - **レプリカ数**: `2`
 - **処理フロー**:
@@ -641,7 +642,8 @@ Worker は以下を実行します:
     "save_data_name": "save_demo",
     "x": 0,
     "y": 0,
-    "output_path": "/images/screenshots/shot_abc123.png"
+    "output_path": "/images/screenshots/shot_abc123.png",
+    "zoom_level": "double"
   }
   ```
 

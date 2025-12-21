@@ -8,12 +8,11 @@ require_relative "x11_controller"
 
 module ServiceCapture
   class GameProcessManager
-    def initialize(executable:, executable_dir:, pakset_name:, pakset_size:, display:, screen_width:, screen_height:,
+    def initialize(executable:, executable_dir:, pakset_name:, display:, screen_width:, screen_height:,
                    ttl_seconds:, boot_timeout_seconds:, boot_poll_interval_seconds:, boot_check_x:, boot_check_y:, x11_controller: nil)
       @executable = executable
       @executable_dir = executable_dir
       @pakset_name = pakset_name
-      @pakset_size = pakset_size # 128 or 64 (256 not supported this time)
       @display = display
       @screen_width = screen_width
       @screen_height = screen_height
@@ -29,6 +28,7 @@ module ServiceCapture
       @last_used_at = nil
 
       @x11_controller = x11_controller
+      @zoom_level = "normal"
 
       FileUtils.mkdir_p("/tmp/service-capture")
     end
@@ -127,9 +127,6 @@ module ServiceCapture
       puts "Game booted. Ensuring building display..."
       wait_for_building_display!
 
-      puts "Zooming in to maximum level..."
-      @x11_controller.zoom_in
-
       puts "Game ready."
     end
 
@@ -167,6 +164,8 @@ module ServiceCapture
         sleep @boot_poll_interval_seconds
       end
 
+      # Timed out
+      stop()
       raise ServiceCapture::Errors::GameBootTimeout, "boot check timed out"
     end
 

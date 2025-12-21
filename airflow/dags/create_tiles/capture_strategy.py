@@ -1,6 +1,6 @@
 from typing import List, Dict, Tuple
 
-PRIORITY_CONSTANT = 10000 # 適当な大きい数値
+PRIORITY_CONSTANT = 1000000 # 適当な大きい数値
 LARGE_GROUP_SIZE = 100 # 基本的なグループ分割のサイズ
 SMALL_GROUP_SIZE = 5 # 最初の斜め移動用のグループ分割のサイズ(早く依存タスクを開始するために小さめの値を指定する)
 
@@ -137,8 +137,10 @@ class CaptureStrategy:
             screenshots.append([])
         
         # PHASE 2: 左方向への走査
+        priority = PRIORITY_CONSTANT * 2
         for start_point in flag1:
-            priority = PRIORITY_CONSTANT * 2 if start_point == flag1[-1] else PRIORITY_CONSTANT # 最後の行は優先度高め
+            if start_point == flag1[-1]:  # 最後の行は優先度高め
+                priority = PRIORITY_CONSTANT * 2
             current_x, current_y = start_point['x'], start_point['y']
             while True:
                 new_x, new_y = self._left(current_x, current_y)
@@ -164,6 +166,7 @@ class CaptureStrategy:
         last_line = flag1[-1]
         start_points = []
         current_x, current_y = last_line['x'], last_line['y']
+        priority = PRIORITY_CONSTANT
         while True:
             start_points.append({'x': current_x, 'y': current_y})
             new_x, new_y = self._left(current_x, current_y)
@@ -172,7 +175,6 @@ class CaptureStrategy:
             current_x, current_y = new_x, new_y
         
         for start_point in start_points:
-            priority = PRIORITY_CONSTANT
             current_x, current_y = start_point['x'], start_point['y']
             while True:
                 new_x, new_y = self._down(current_x, current_y)
@@ -246,8 +248,10 @@ class CaptureStrategy:
             screenshots.append([])
         
         # PHASE 2: 右方向への走査
+        priority = PRIORITY_CONSTANT * 2
         for start_point in flag1:
-            priority = PRIORITY_CONSTANT * 2 if start_point == flag1[-1] else PRIORITY_CONSTANT # 最後の行は優先度高め
+            if start_point == flag1[-1]:  # 最後の行は優先度高め
+                priority = PRIORITY_CONSTANT * 2
             current_x, current_y = start_point['x'], start_point['y']
             while True:
                 new_x, new_y = self._right(current_x, current_y)
@@ -280,8 +284,8 @@ class CaptureStrategy:
                 break
             current_x, current_y = new_x, new_y
         
+        priority = PRIORITY_CONSTANT
         for start_point in start_points:
-            priority = PRIORITY_CONSTANT
             current_x, current_y = start_point['x'], start_point['y']
             while True:
                 new_x, new_y = self._down(current_x, current_y)

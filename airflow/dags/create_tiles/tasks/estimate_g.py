@@ -12,13 +12,15 @@ def estimate_g(group: list, capture_results: list, estimate_results: list):
         print(f"  x:{area['x']}, y:{area['y']}, priority:{area['priority']}")
         for comp in area['compare']:
             print(f"    compare x:{comp['x']}, y:{comp['y']}")
-    print(f"Received {len(capture_results)} capture results")
+    print(f"Received {len(capture_results)} capture results groups")
     for capture_result in capture_results:
+        print(" Capture result:")
         for xy_str, image_path in capture_result.items():
             x, y = parse_xy_str(xy_str)
             print(f"  coords: ({x}, {y}), image_path: {image_path}")
-    print(f"Received {len(estimate_results)} estimate results")
+    print(f"Received {len(estimate_results)} estimate results groups")
     for estimate_result in estimate_results:
+        print(" Estimate result:")
         for xy_str, coords in estimate_result.items():
             x, y = parse_xy_str(xy_str)
             print(f"  coords: ({x}, {y}), estimated coords: ({coords['x']}, {coords['y']})")

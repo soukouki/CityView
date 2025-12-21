@@ -64,5 +64,12 @@ module ServiceCapture
       sleep 0.02
       3.times { key("Page_Up"); sleep 0.02 }
     end
+
+    def zoom_out
+      # 画面の中央にマウスを移動してPage_Down(3回)
+      mousemove(@screen_width / 2, @screen_height / 2)
+      sleep 0.02
+      3.times { key("Page_Down"); sleep 0.02 }
+    end
   end
 end

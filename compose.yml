@@ -15,7 +15,7 @@ x-airflow-common: &x-airflow-common
       SERVICE_TILE_COMPRESS_URL: http://service-tile-compress:5004
       BACKEND_INTERNAL_URL: http://backend:8002
       STORAGE_URL: http://storage
-      PAKSET_SIZE: ${PAKSET_SIZE}
+      ADJUSTED_PAKSIZE: ${ADJUSTED_PAKSIZE}
       TILE_SIZE: ${TILE_SIZE}
       DELTA: ${DELTA}
       MAP_TILES_X: ${MAP_TILES_X}
@@ -178,16 +178,16 @@ services:
       STORAGE_URL: http://storage
       GAME_EXECUTABLE: simutrans-extended
       PAKSET_NAME: ${PAKSET_NAME}
-      PAKSET_SIZE: ${PAKSET_SIZE}
+      ZOOM_LEVEL: ${ZOOM_LEVEL}
       CAPTURE_SCREEN_WIDTH: ${CAPTURE_WIDTH}
       CAPTURE_SCREEN_HEIGHT: ${CAPTURE_HEIGHT}
       CAPTURE_CROP_WIDTH: ${IMAGE_WIDTH}
       CAPTURE_CROP_HEIGHT: ${IMAGE_HEIGHT}
       CAPTURE_CROP_OFFSET_X: ${CROP_OFFSET_X}
       CAPTURE_CROP_OFFSET_Y: ${CROP_OFFSET_Y}
-      CAPTURE_TTL_SECONDS: 60
-      GAME_BOOT_TIMEOUT_SECONDS: 180
-      GAME_BOOT_POLL_INTERVAL_SECONDS: 1
+      CAPTURE_TTL_SECONDS: 300 # GAME_CAPTURE_TIMEOUT_SECONDSより長く設定すること
+      GAME_BOOT_TIMEOUT_SECONDS: 300 # 大規模マップの場合は起動に時間がかかることがあるため長めに設定すること
+      GAME_BOOT_POLL_INTERVAL_SECONDS: 5
       GAME_BOOT_CHECK_X: 256 # この座標が黒いかどうかで起動完了を判定する
       GAME_BOOT_CHECK_Y: 256
     volumes:

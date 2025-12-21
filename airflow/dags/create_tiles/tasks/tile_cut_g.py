@@ -19,11 +19,15 @@ def tile_cut_g(gx: int, gy: int, related_areas: list, capture_results: list, est
     print(f"Processing tile cut group at ({gx}, {gy}) with {len(related_areas)} related areas")
     for area in related_areas:
         print(f"  Related area: x{area['x']}, y{area['y']}")
+    print(f"Received {len(capture_results)} capture results groups")
     for capture_result in capture_results:
+        print(" Capture result:")
         for xy_str, image_path in capture_result.items():
             x, y = parse_xy_str(xy_str)
             print(f"  Capture result - coords: ({x}, {y}), image_path: {image_path}")
+    print(f"Received {len(estimate_results)} estimate results groups")
     for estimate_result in estimate_results:
+        print(" Estimate result:")
         for xy_str, coords in estimate_result.items():
             x, y = parse_xy_str(xy_str)
             print(f"  Estimate result - coords: ({x}, {y}), estimated coords: ({coords['x']}, {coords['y']})")

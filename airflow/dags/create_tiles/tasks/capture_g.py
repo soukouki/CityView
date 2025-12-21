@@ -1,13 +1,15 @@
 import requests
 from airflow.operators.python import get_current_context
 from airflow.decorators import task
-from create_tiles.config import SERVICE_CAPTURE_URL, STORAGE_URL
+from create_tiles.config import SERVICE_CAPTURE_URL, STORAGE_URL, ZOOM_LEVEL
 
 @task
 def capture_g(tasks: list):
     # raise NotImplementedError("debugging") # すべてのタスクを失敗させたいときに使う
     save_data_name = get_current_context()['params']['save_data_name']
     print(f"Capturing group with {len(tasks)} tasks")
+    for task in tasks:
+        print(f"  Task: x={task['x']}, y={task['y']}")
     captured_results = {}
     for task in tasks:
         x = task['x']
@@ -41,6 +43,7 @@ def capture(save_data_name: str, x: int, y: int, output_path: str):
         "x": x,
         "y": y,
         "output_path": output_path,
+        "zoom_level": ZOOM_LEVEL, # 本当はDAGのparamsから取れるようにしたいが、そのためにはAirflow以外へ移行する必要があり、面倒なので一旦雑に対応
     }
     response = requests.post(url, json=payload)
     print(f"status code: {response.status_code}")
