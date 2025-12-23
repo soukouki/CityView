@@ -14,7 +14,7 @@
 
 #### 変更耐性の確保
 - 下位層の処理サービスは上位層の知識を持たない。
-- Airflow DAGの変更がBackendやサービスに影響しないように設計する。
+- オーケストレーション層の変更がBackendやサービスに影響しないように設計する。
 
 ## 2. コンテナ構成
 
@@ -24,34 +24,21 @@
 - **役割**: データベースサーバー
 - **責務**:
   - アプリケーションデータの永続化（`gamedb`）
-  - Airflowメタデータの永続化（`airflow`）
+  - Prefectメタデータの永続化（`gamedb`内の`prefect_*`テーブル）
 - **接続元**:
   - backend（`gamedb` への読み書き）
-  - airflow-webserver, airflow-scheduler（`airflow` への読み書き）
-  - airflow-worker-*（`airflow` への読み書き）
+  - prefect-server（`gamedb` 内の `prefect_*` テーブルへの読み書き）
+  - prefect-agent（`gamedb` への読み書き：Backend API経由）
 - **ポート**: `5432`
 - **データベース**:
-  - `gamedb`: アプリケーションデータ
-    - `jobs`: ジョブ管理（`job_id`, `game_id`, `save_data_name`, `status`, `created_at` など）
+  - `gamedb`: アプリケーションデータおよびPrefectメタデータ
+    - `jobs`: ジョブ管理（`job_id`, `game_id`, `save_data_name`, `status`, `flow_run_id`, `created_at` など）
     - `savedatas`: セーブデータ情報
     - `screenshots`: スクリーンショットと推定座標（`screenshot_id`, `job_id`, `x`, `y`, `estimated_x`, `estimated_y`, `filepath`, `status` など）
     - `tiles`: タイルメタデータ（`tile_id`, `job_id`, `z`, `x`, `y`, `filepath`, `compressed`, `source_type` など）
       - `compressed`: 圧縮済みかどうか（boolean）
       - `source_type`: タイルの生成元（`screenshot`, `merged`）
-  - `airflow`: Airflowメタデータ
-    - `dag_run`: DAG実行履歴
-    - `task_instance`: タスク実行状態
-    - `xcom`: タスク間データ受け渡し
-
-#### redis
-- **役割**: メッセージブローカー
-- **責務**:
-  - Celery（Airflow Worker）のタスクキュー管理
-  - キュー: `capture`, `estimate`, `tile_cut`, `tile_merge`, `tile_compress`, `tile_cleanup`, `screenshot_cleanup`
-- **接続元**:
-  - airflow-scheduler（タスク投入）
-  - airflow-worker-*（タスク取得）
-- **ポート**: `6379`
+    - `prefect_*`: Prefectメタデータ（Prefect Serverが自動作成・管理）
 
 #### storage
 - **役割**: ファイルストレージサーバー（nginx + WebDAV）
@@ -69,7 +56,7 @@
         {z}/
           {x}/
             {y}.png # 未圧縮タイル（一時データ）
-      tiles
+      tiles/
         {z}/
           {x}/
             {y}.avif # 圧縮タイル（永続データ）
@@ -93,8 +80,6 @@
   - service-tile-cut（GET - スクリーンショット, PUT - 未圧縮タイル）
   - service-tile-merge（GET - 未圧縮タイル, PUT - 未圧縮タイル）
   - service-tile-compress（GET - 未圧縮タイル, PUT - 圧縮タイル）
-  - airflow-worker-capture-cleanup（DELETE - スクリーンショット）
-  - airflow-worker-tile-cleanup（DELETE - 未圧縮タイル）
   - backend（GET - 圧縮タイル配信）
 - **ポート**: `80`
 - **設定**: nginx WebDAV有効化、最大アップロードサイズ 50MB
@@ -106,7 +91,7 @@
 - **責務**:
   - ビジネスロジック実行
   - `gamedb` への読み書き
-  - Airflow DAG起動
+  - Prefect Flow起動
   - 管理画面/マップ閲覧画面のHTML配信
   - 静的ファイル（CSS、JavaScript等）の配信
   - タイル配信（storage へのリバースプロキシ）
@@ -114,12 +99,12 @@
 - **DB接続**:
   - `gamedb`: 読み書き
 - **呼び出し先**:
-  - airflow-webserver: DAG起動
+  - prefect-server: Flow起動
   - storage: タイル取得（配信用）
 - **ポート**:
   - メイン: `8000`
   - 管理画面: `8001`
-  - Airflow Workers 内部 API: `8002`
+  - Prefect Agent 内部 API: `8002`
 - **エンドポイント**:
 
 ##### メイン画面
@@ -137,10 +122,10 @@
 ##### 管理画面 API
 | メソッド | パス | 説明 | リクエスト | レスポンス |
 |---|---|---|---|---|
-| POST | `/api/tiles/create` | タイル生成ジョブ作成、DAG起動 | `{"game_id": "string", "save_data_name": "string"}` | `{"job_id": 0, "status": "string", "dag_run_id": "string"}` |
+| POST | `/api/tiles/create` | タイル生成ジョブ作成、Flow起動 | `{"game_id": "string", "save_data_name": "string"}` | `{"job_id": 0, "status": "string", "flow_run_id": "string"}` |
 | GET | `/api/status` | 全ジョブのステータス一覧取得 | - | `[{"job_id": 0, "status": "string", "progress": 0.0, "total_tiles": 0, "created_tiles": 0}]` |
 
-##### Airflow Workers 専用内部 API
+##### Prefect Agent 専用内部 API
 | メソッド | パス | 説明 | リクエスト | レスポンス |
 |---|---|---|---|---|
 | POST | `/api/internal/screenshots` | スクリーンショットメタデータ保存 | `{"job_id": 0, "screenshot_id": "string", "x": 0, "y": 0, "filepath": "string"}` | `{"success": true}` |
@@ -155,202 +140,56 @@
 |---|---|---|
 | GET | `/tiles/{z}/{x}/{y}.avif` | タイル画像配信（storage `/images/tiles/` へプロキシ） |
 
-### 2.3 Airflow層
+### 2.3 Prefect層
 
-#### airflow-webserver
-- **役割**: Airflow Web UI および REST API サーバー
+#### prefect-server
+- **役割**: Prefect Server（オーケストレーション管理サーバー）
 - **責務**:
-  - Airflow Web UI 提供
-  - DAG 実行トリガーAPI 提供
-  - airflow DB への読み書き
+  - Flow実行の管理
+  - タスク状態の追跡
+  - Web UIの提供
+  - REST APIの提供
+  - `gamedb` 内の `prefect_*` テーブルへの読み書き
 - **DB接続**:
-  - `airflow`: 読み書き
+  - `gamedb`: 読み書き（`prefect_*` テーブル）
 - **エンドポイント**:
 
   | メソッド | パス | 説明 |
   |---|---|---|
-  | POST | `/api/v1/dags/{dag_id}/dagRuns` | DAG実行トリガー |
+  | POST | `/api/deployments/{deployment_id}/create_flow_run` | Flow実行トリガー |
+  | GET | `/api/flow_runs/{flow_run_id}` | Flow実行状態取得 |
 
 - **ポート**: `8003`
 
-#### airflow-scheduler
-- **役割**: Airflow スケジューラー
+#### prefect-agent
+- **役割**: Prefect Agent（Flow実行ワーカー）
 - **責務**:
-  - DAG定義の読み込みとタスク生成
-  - タスクの依存関係管理
-  - 実行可能なタスクの検出
-  - Redis へのタスク投入
-  - タスク完了の監視と次タスクのスケジューリング
-- **DB接続**:
-  - `airflow`: 読み書き
+  - Prefect Serverからフロー実行を取得
+  - Flowの実行（動的タスク生成含む）
+  - 各 `service-*` サービスの呼び出し
+  - Backend API を通じた結果の永続化
+  - タスク状態の報告
+- **DB接続**: なし（Backend API経由でのみデータ操作）
 - **呼び出し先**:
-  - redis: タスク投入（LPUSH）
-
-### 2.4 Airflow Worker層
-
-#### airflow-worker-capture
-- **役割**: スクリーンショット撮影タスク実行ワーカー
-- **責務**:
-  - `capture` キューからタスク取得
-  - `service-capture` サービス呼び出し
-  - Backend API を通じて結果を `gamedb` に永続化
-  - タスク状態更新
-- **DB接続**:
-  - `airflow`: 読み書き（タスク状態、XCom）
-- **呼び出し先**:
-  - redis: タスク取得
+  - prefect-server: Flow取得、状態報告
   - service-capture: スクリーンショット撮影依頼
-  - backend: 結果の永続化
-- **レプリカ数**: `2`
-- **処理フロー**:
-  1. Redis からタスク取得
-  2. airflow DB でタスクを `running` 状態に更新
-  3. `service-capture` を呼び出し
-  4. レスポンスを airflow DB の XCom に保存
-  5. Backend の `/api/internal/screenshots` を呼び出して結果を永続化
-  6. airflow DB でタスクを `success` 状態に更新
-
-#### airflow-worker-estimate
-- **役割**: 座標推定タスク実行ワーカー
-- **責務**:
-  - `estimate` キューからタスク取得
-  - 前タスクの結果を XCom から取得
-  - `service-estimate` サービス呼び出し
-  - Backend API を通じて結果を `gamedb` に永続化
-  - タスク状態更新
-- **DB接続**:
-  - `airflow`: 読み書き（タスク状態、XCom）
-- **呼び出し先**:
-  - redis: タスク取得
   - service-estimate: 座標推定依頼
-  - backend: 結果の永続化
-- **レプリカ数**: `2`
-- **処理フロー**:
-  1. Redis からタスク取得
-  2. airflow DB でタスクを `running` 状態に更新
-  3. airflow DB の XCom から前タスク結果取得
-  4. `service-estimate` を呼び出し
-  5. レスポンスを airflow DB の XCom に保存
-  6. Backend の `/api/internal/screenshots/{id}` を呼び出して推定座標を更新
-  7. airflow DB でタスクを `success` 状態に更新
-
-#### airflow-worker-tile-cut
-- **役割**: 最大ズームタイル切り出しタスク実行ワーカー（未圧縮）
-- **責務**:
-  - `tile_cut` キューからタスク取得
-  - 前タスクの結果を XCom から取得
-  - `service-tile-cut` サービス呼び出し
-  - Backend API を通じて結果を `gamedb` に永続化
-  - タスク状態更新
-- **DB接続**:
-  - `airflow`: 読み書き（タスク状態、XCom）
-- **呼び出し先**:
-  - redis: タスク取得
   - service-tile-cut: タイル切り出し依頼
-  - backend: 結果の永続化
-- **レプリカ数**: `2`
-- **処理フロー**:
-  1. Redis からタスク取得
-  2. airflow DB でタスクを `running` 状態に更新
-  3. airflow DB の XCom から複数の前タスク結果取得
-  4. `service-tile-cut` を呼び出し
-  5. レスポンスを airflow DB の XCom に保存
-  6. Backend の `/api/internal/tiles` を呼び出してタイル情報を永続化
-  7. airflow DB でタスクを `success` 状態に更新
-
-#### airflow-worker-tile-merge
-- **役割**: タイルマージタスク実行ワーカー（ズームアウト画像生成）
-- **責務**:
-  - `tile_merge` キューからタスク取得
-  - 前タスクの結果を XCom から取得
-  - `service-tile-merge` サービス呼び出し
-  - Backend API を通じて結果を `gamedb` に永続化
-  - タスク状態更新
-- **DB接続**:
-  - `airflow`: 読み書き（タスク状態、XCom）
-- **呼び出し先**:
-  - redis: タスク取得
   - service-tile-merge: タイルマージ依頼
-  - backend: 結果の永続化
-- **レプリカ数**: `2`
-- **処理フロー**:
-  1. Redis からタスク取得
-  2. airflow DB でタスクを `running` 状態に更新
-  3. airflow DB の XCom から子タイル（4枚）の情報取得
-  4. `service-tile-merge` を呼び出し
-  5. レスポンスを airflow DB の XCom に保存
-  6. Backend の `/api/internal/tiles` を呼び出してマージタイル情報を永続化
-  7. airflow DB でタスクを `success` 状態に更新
-
-#### airflow-worker-tile-compress
-- **役割**: タイル圧縮タスク実行ワーカー
-- **責務**:
-  - `tile_compress` キューからタスク取得
-  - 前タスクの結果を XCom から取得
-  - `service-tile-compress` サービス呼び出し
-  - Backend API を通じて結果を `gamedb` に永続化
-  - タスク状態更新
-- **DB接続**:
-  - `airflow`: 読み書き（タスク状態、XCom）
-- **呼び出し先**:
-  - redis: タスク取得
   - service-tile-compress: タイル圧縮依頼
-  - backend: 結果の永続化
+  - backend: 結果の永続化（内部API）
 - **レプリカ数**: `2`
+- **環境変数**:
+  - `PREFECT_API_URL`: `http://prefect-server:4200/api`
 - **処理フロー**:
-  1. Redis からタスク取得
-  2. airflow DB でタスクを `running` 状態に更新
-  3. airflow DB の XCom から未圧縮タイル情報取得
-  4. `service-tile-compress` を呼び出し
-  5. レスポンスを airflow DB の XCom に保存
-  6. Backend の `/api/internal/tiles/compress` を呼び出して圧縮完了を記録
-  7. airflow DB でタスクを `success` 状態に更新
+  1. Prefect Server からフロー実行指示を取得
+  2. Flow関数を実行（動的にタスクを生成・実行）
+  3. 各タスク内で `service-*` を呼び出し
+  4. Backend の `/api/internal/*` を呼び出して結果を永続化
+  5. タスク完了を Prefect Server に報告
+  6. Flow完了を Prefect Server に報告
 
-#### airflow-worker-tile-cleanup
-- **役割**: 未圧縮タイル削除タスク実行ワーカー
-- **責務**:
-  - `tile_cleanup` キューからタスク取得
-  - 未圧縮タイルがもう使用されないことを確認
-  - Backend API とストレージを通じて未圧縮タイルを削除（ファイル + DBレコード）
-  - タスク状態更新
-- **DB接続**:
-  - `airflow`: 読み書き（タスク状態、XCom）
-- **呼び出し先**:
-  - redis: タスク取得
-  - storage: 未圧縮タイル削除
-  - backend: タイル削除指示
-- **レプリカ数**: `2`
-- **処理フロー**:
-  1. Redis からタスク取得
-  2. airflow DB でタスクを `running` 状態に更新
-  3. XCom から対象タイルID取得
-  4. Storage の `/images/rawtiles/{z}/{x}/{y}.png` DELETE を呼び出し
-  5. Backend の `/api/internal/tiles/{tile_id}` DELETE を呼び出し
-  6. airflow DB でタスクを `success` 状態に更新
-
-#### airflow-worker-capture-cleanup
-- **役割**: スクリーンショット削除タスク実行ワーカー
-- **責務**:
-  - `screenshot_cleanup` キューからタスク取得
-  - スクリーンショットがもう使用されないことを確認
-  - ストレージと Backend API を通じてスクリーンショットを削除（ファイル + DBレコード）
-  - タスク状態更新
-- **DB接続**:
-  - `airflow`: 読み書き（タスク状態、XCom）
-- **呼び出し先**:
-  - redis: タスク取得
-  - storage: スクリーンショット削除
-  - backend: スクリーンショット削除指示
-- **レプリカ数**: `2`
-- **処理フロー**:
-  1. Redis からタスク取得
-  2. airflow DB でタスクを `running` 状態に更新
-  3. XCom から対象スクリーンショットID取得
-  4. Storage の `/images/screenshots/{screenshot_id}.png` DELETE を呼び出し
-  5. Backend の `/api/internal/screenshots/{id}` DELETE を呼び出し
-  6. airflow DB でタスクを `success` 状態に更新
-
-### 2.5 処理サービス層
+### 2.4 処理サービス層
 
 #### service-capture
 - **役割**: スクリーンショット撮影サービス（Ruby + Sinatra）
@@ -366,7 +205,7 @@
 
   | メソッド | パス | 説明 | リクエスト | レスポンス |
   |---|---|---|---|---|
-  | POST | `/capture` | スクリーンショット撮影 | `{"save_data_name": "string", "x": 0, "y": 0, "output_path": "string", "zoom_level": "string}` | `{"status": "ok"}` |
+  | POST | `/capture` | スクリーンショット撮影 | `{"save_data_name": "string", "x": 0, "y": 0, "output_path": "string", "zoom_level": "string"}` | `{"status": "ok"}` |
   - `zoom_level` : `"quarter"`, `"half"`, `"normal"`, `"double"`のいずれか
 
 - **レプリカ数**: `2`
@@ -443,7 +282,7 @@
     ],
     "cut_area": {
       "x": number,             // 切り出し開始X（スクショ座標）
-      "y": number,             // 切り出し開始Y（スクショ座標）
+      "y": number              // 切り出し開始Y（スクショ座標）
     },
     "output_path": "string"    // 保存先パス（例: "/images/rawtiles/18/10/20.png"）
   }
@@ -452,7 +291,7 @@
 - **レスポンス**:
   ```json
   {
-    "output_path": "string",   // 保存されたパス
+    "output_path": "string"   // 保存されたパス
   }
   ```
 
@@ -500,7 +339,7 @@
 - **レスポンス**:
   ```json
   {
-    "output_path": "string",   // 保存されたパス
+    "output_path": "string"   // 保存されたパス
   }
   ```
 
@@ -529,7 +368,7 @@
 
   | メソッド | パス | 説明 | リクエスト | レスポンス |
   |---|---|---|---|---|
-  | POST | `/compress` | タイル圧縮 | `{"input_path": "str", "outpput_path": "str", "quality": str}` | `{}` |
+  | POST | `/compress` | タイル圧縮 | `{"input_path": "str", "output_path": "str", "quality": str}` | `{}` |
 
   - `quality` : 0〜100 もしくは "lossless"
 
@@ -538,7 +377,7 @@
   1. リクエスト受信
   2. storage から未圧縮タイルを取得
   3. AVIFに圧縮
-  4. storage の `/images/tiles/compressed/{z}/{x}/{y}.avif` に保存
+  4. storage の `/images/tiles/{z}/{x}/{y}.avif` に保存
   5. メモリ解放
   6. タイルパスを返却
 - **ポート**: `5004`
@@ -548,8 +387,8 @@
 ### 3.1 全体フロー概要
 ```text
 1. 管理画面で「タイル生成」ボタンを押下
-2. Backend が job を作成し、Airflow DAG を起動
-3. Airflow Scheduler がタスクを生成・スケジューリング
+2. Backend が job を作成し、Prefect Flow を起動
+3. Prefect Agent がフローを実行（動的にタスクを生成）
 4. スクリーンショット撮影タスク（並列実行）
 5. 座標推定タスク（並列実行）
 6. 最大ズームタイル切り出しタスク（並列実行、未圧縮PNG）
@@ -562,7 +401,7 @@
 10. 完了、管理画面でステータスを確認
 ```
 
-ここでは未圧縮タイル削除タスクが2回書かれているが、実際にはDAGで適切に依存関係を設定することで、各タイルが使用されなくなったタイミングで1回だけ実行される。
+ここでは未圧縮タイル削除タスクが2回書かれているが、実際にはFlowで適切に依存関係を設定することで、各タイルが使用されなくなったタイミングで1回だけ実行される。
 
 ### 3.2 タスク依存関係の詳細
 
@@ -574,24 +413,18 @@ capture_{i}
   >> tile_cut_{z_max}_{x}_{y}  (最大ズームタイル切り出し)
   >> [
        tile_compress_{z_max}_{x}_{y}  (最大ズームタイル圧縮)
-         >> tile_cleanup_{z_max}_{x}_{y}  (未圧縮タイル削除)
        ,
        tile_merge_{z_max-1}_{x/2}_{y/2}  (ズームアウト1段階目)
-         >> tile_compress_{z_max-1}_{x/2}_{y/2}
-         >> tile_cleanup_{z_max-1}_{x/2}_{y/2}
-         >> tile_merge_{z_max-2}_{x/4}_{y/4}  (ズームアウト2段階目)
-         >> ...
-         >> tile_merge_{z_min}_{...}_{...}  (最小ズームまで)
-         >> tile_compress_{z_min}_{...}_{...}
-         >> tile_cleanup_{z_min}_{...}_{...}
+        >> [
+          tile_compress_{z_max-1}_{x/2}_{y/2}
+          ,
+          tile_merge_{z_max-2}_{x/4}_{y/4}  (ズームアウト2段階目)
+          >> ...
+          >> tile_merge_{z_min}_{...}_{...}  (最小ズームまで)
+          >> tile_compress_{z_min}_{...}_{...}
+        ]
      ]
-  >> screenshot_cleanup_{i}  (全タイル完了後にスクショ削除)
 ```
-
-**依存関係の詳細**:
-- `tile_merge_{z}_{x}_{y}` は4枚の子タイル（`tile_cut_{z+1}_{2x}_{2y}`, `tile_cut_{z+1}_{2x+1}_{2y}`, `tile_cut_{z+1}_{2x}_{2y+1}`, `tile_cut_{z+1}_{2x+1}_{2y+1}`）または4枚のマージタイルの**圧縮完了**を待つ
-- `tile_cleanup_{z}_{x}_{y}` は該当タイルを使用するすべてのタスク（圧縮タスク、またはマージタスク）の完了を待つ
-- `screenshot_cleanup_{i}` は該当スクリーンショットを使用するすべての `tile_cut` タスクの子孫タスク（圧縮、マージ、削除すべて）の完了を待つ
 
 ### 3.3 詳細フロー
 
@@ -602,39 +435,29 @@ Backendは以下を実行します:
 - gamedbに新しいジョブレコードを作成（`status='preparing'`）
 - 撮影対象エリアのリストを計算
 - タイル生成パラメータを計算（最大ズーム、最小ズーム、タイル依存関係）
-- AirflowのDAG起動APIを呼び出し、`map_processing` DAGを起動
-- 起動された `dag_run_id` を取得してDBに保存
+- PrefectのFlow起動APIを呼び出し、`map_processing` Flowを起動
+- 起動された `flow_run_id` を取得してDBに保存
 - ジョブステータスを `running` に更新
 
 Backendはクライアントに以下を返します:
 ```json
-{"job_id": 123, "status": "running", "dag_run_id": "run_123"}
+{"job_id": 123, "status": "running", "flow_run_id": "abc-123-def"}
 ```
 
 ブラウザは `/api/status` を3秒ごとにポーリング開始します。
 
-#### Step 2: タスク生成とスケジューリング
-Airflow Schedulerはdag_runを検知し、DAG定義ファイルを読み込みます。パラメータから撮影エリア数（例: 10,000）、ズームレベル範囲（例: z_max=18, z_min=0）、タイル依存関係を取得し、以下のタスクを動的に生成します:
+#### Step 2: Flow実行開始
+Prefect Agentはprefect-serverからフロー実行指示を取得します。
 
-- `capture_*_*`（スクリーンショット撮影）
-- `estimate_*_*`（座標推定）
-- `tile_cut_18_*_*`（最大ズームタイル切り出し、数十万個）
-- `tile_compress_18_*_*`（最大ズームタイル圧縮）
-- `tile_cleanup_18_*_*`（未圧縮タイル削除）
-- `tile_merge_17_*_*`, `tile_compress_17_*_*`, `tile_cleanup_17_*_*`（ズームレベル17）
-- `tile_merge_16_*_*`, `tile_compress_16_*_*`, `tile_cleanup_16_*_*`（ズームレベル16）
-- ...（ズームレベル0まで）
-- `screenshot_cleanup_0`, `screenshot_cleanup_1`, ...（スクリーンショット削除）
-
-Schedulerは実行可能なタスク（`capture_*`）をRedisの `capture` キューに投入します。
-
-ズームレベル範囲はpaksetのサイズとマップのサイズに基づいて決定される。
+Agentは以下を実行します:
+- Flow関数 `map_processing` を実行開始
+- パラメータから撮影エリア数、ズームレベル範囲、タイル依存関係を取得
+- 実行時に動的にタスクを生成
 
 #### Step 3: スクリーンショット撮影
-`airflow-worker-capture` は `capture` キューからタスク（例: `"capture_0_0"`）を取得します。
+Agentはスクリーンショット撮影タスクを並列実行します。
 
-Worker は以下を実行します:
-- airflow DBでタスクを `running` に更新
+各タスクは以下を実行します:
 - ジョブの設定パラメータからエリアID 0の座標を取得（例: `x=0`, `y=0`）
 - `service-capture` を呼び出し: `POST http://service-capture:5000/capture`
   ```json
@@ -653,8 +476,8 @@ Worker は以下を実行します:
 - storageへ `PUT /images/screenshots/shot_abc123.png` でファイル保存
 - `{"image_path": "/images/screenshots/shot_abc123.png"}` を返却
 
-Worker は以下を実行します:
-- レスポンスを受け取り、airflow DBのXComに保存
+タスクは以下を実行します:
+- レスポンスを受け取り、タスクの戻り値として保持
 - Backend の `POST /api/internal/screenshots` を呼び出し:
   ```json
   {
@@ -666,15 +489,14 @@ Worker は以下を実行します:
   }
   ```
 - Backendは `screenshots` テーブルにレコード挿入
-- airflow DBでタスクを `success` に更新
+- タスク完了を返す
 
 #### Step 4: 座標推定
-`airflow-worker-estimate` は `estimate` キューからタスク（`"estimate_0"`）を取得します。
+Agentは座標推定タスクを並列実行します。
 
-Worker は以下を実行します:
-- airflow DBでタスクを `running` に更新
-- XComから、該当スクリーンショットの情報と、隣接エリアのスクリーンショット情報を取得
-- DAGの設定から期待座標（ヒント）と隣接画像を取得
+各タスクは以下を実行します:
+- 前タスク（スクリーンショット撮影）の戻り値を取得
+- Flowの設定から期待座標（ヒント）と隣接画像を取得
 - `service-estimate` を呼び出し: `POST http://service-estimate:5001/estimate`
   ```json
   {
@@ -693,8 +515,8 @@ Worker は以下を実行します:
 - ヒント座標も考慮した座標推定
 - `{"estimated_x": 1024, "estimated_y": 2048}` を返却
 
-Worker は以下を実行します:
-- レスポンスを受け取り、airflow DBのXComに保存
+タスクは以下を実行します:
+- レスポンスを受け取り、タスクの戻り値として保持
 - Backend の `PUT /api/internal/screenshots/shot_abc123` を呼び出し:
   ```json
   {
@@ -703,13 +525,14 @@ Worker は以下を実行します:
   }
   ```
 - Backendは `screenshots` テーブルの該当レコードに推定座標を更新
-- airflow DBでタスクを `success` に更新
+- タスク完了を返す
 
 ### Step 5: 最大ズームタイル切り出し
-Worker は以下を実行します:
-- airflow DBでタスクを `running` に更新
-- DAGの設定からこのタイルが必要とするエリアID（例: `area_id: 0, 1, 128, 129`）を取得
-- XComから各エリアのcapture・estimate結果を取得し、`images` リストを構築
+Agentは最大ズームタイル切り出しタスクを並列実行します。
+
+各タスクは以下を実行します:
+- Flowの設定からこのタイルが必要とするエリアIDを取得
+- 前タスク（座標推定）の戻り値から各エリアの情報を取得し、`images` リストを構築
 - **座標変換を実施**: タイル座標 `(z=18, tx=10, ty=20)` からスクショ座標の切り出し範囲を計算
 - `service-tile-cut` を呼び出し: `POST http://service-tile-cut:5002/cut`
   ```json
@@ -729,19 +552,42 @@ Worker は以下を実行します:
   }
   ```
 
+`service-tile-cut` は以下を実行します:
+- 複数のスクリーンショットを storage から取得
+- 仮想キャンバスに配置し、指定範囲を切り出し
+- PNGで storage へ保存
+- `{"output_path": "/images/rawtiles/18/10/20.png"}` を返却
+
+タスクは以下を実行します:
+- レスポンスを受け取り、タスクの戻り値として保持
+- Backend の `POST /api/internal/tiles` を呼び出し:
+  ```json
+  {
+    "job_id": 123,
+    "tiles": [
+      {
+        "z": 18,
+        "x": 10,
+        "y": 20,
+        "filepath": "/images/rawtiles/18/10/20.png",
+        "source_type": "screenshot"
+      }
+    ]
+  }
+  ```
+- Backendは `tiles` テーブルにレコード挿入
+- タスク完了を返す
+
 #### Step 6: 最大ズームタイル圧縮
-`tile_cut_18_10_20` タスクが完了すると `tile_compress_18_10_20` が実行可能になります。
+Agentは最大ズームタイル圧縮タスクを並列実行します。
 
-`airflow-worker-tile-compress` は `tile_compress` キューからタスク（`"tile_compress_18_10_20"`）を取得します。
-
-Worker は以下を実行します:
-- airflow DBでタスクを `running` に更新
-- XComから `tile_cut_18_10_20` の結果を取得（`{"tile_path": "/images/rawtiles/18/10/20.png"}`）
+各タスクは以下を実行します:
+- 前タスク（タイル切り出し）の戻り値を取得
 - `service-tile-compress` を呼び出し: `POST http://service-tile-compress:5004/compress`
   ```json
   {
-    "input_path": "/images/rawtiles/demo/18/10/20.png",
-    "output_path": "/images/tiles/demo/18/10/20.avif",
+    "input_path": "/images/rawtiles/18/10/20.png",
+    "output_path": "/images/tiles/18/10/20.avif",
     "quality": "30"
   }
   ```
@@ -752,8 +598,8 @@ Worker は以下を実行します:
 - storageへ `PUT /images/tiles/18/10/20.avif` で保存
 - `{"compressed_tile_path": "/images/tiles/18/10/20.avif"}` を返却
 
-Worker は以下を実行します:
-- レスポンスを受け取り、airflow DBのXComに保存
+タスクは以下を実行します:
+- レスポンスを受け取り
 - Backend の `PUT /api/internal/tiles/compress` を呼び出し:
   ```json
   {
@@ -762,13 +608,14 @@ Worker は以下を実行します:
   }
   ```
 - Backendは `tiles` テーブルの該当レコードを更新（`compressed=true`, `filepath` を圧縮版に更新）
-- airflow DBでタスクを `success` に更新
+- タスク完了を返す
 
-### Step 7: ズームアウトタイルマージ（修正版）
+### Step 7: ズームアウトタイルマージ
 
-Worker は以下を実行します:
-- airflow DBでタスクを `running` に更新
-- XComから4枚の子タイルの情報を取得
+Agentはズームアウトタイルマージタスクを並列実行します。
+
+各タスクは以下を実行します:
+- 前タスク（4枚の子タイル切り出し/マージ）の戻り値を取得
 - **子タイルのパスを特定**: タイル座標 `(z=17, tx=10, ty=20)` の子タイルは以下
   ```python
   child_z = 18
@@ -778,8 +625,6 @@ Worker は以下を実行します:
       (child_z, tx * 2, ty * 2 + 1),    # 左下
       (child_z, tx * 2 + 1, ty * 2 + 1) # 右下
   ]
-  # 各子タイルのパスを構築
-  # "/images/rawtiles/18/20/40.png" など
   ```
 - `service-tile-merge` を呼び出し: `POST http://service-tile-merge:5003/merge`
   ```json
@@ -806,40 +651,25 @@ Worker は以下を実行します:
   }
   ```
 
-#### Step 8: 未圧縮タイル削除
-`tile_compress_18_10_20` タスクが完了し、このタイルを必要とする他のタスク（この場合は `tile_merge_17_5_10`）も完了すると、`tile_cleanup_18_10_20` が実行可能になります。
+`service-tile-merge` は以下を実行します:
+- 4枚の画像を storage から取得
+- 2x2で結合、リサイズ
+- PNGで storage へ保存
+- `{"output_path": "/images/rawtiles/17/10/20.png"}` を返却
 
-`airflow-worker-tile-cleanup` は `tile_cleanup` キューからタスク（`"tile_cleanup_18_10_20"`）を取得します。
+タスクは以下を実行します:
+- レスポンスを受け取り、タスクの戻り値として保持
+- Backend の `POST /api/internal/tiles` を呼び出してマージタイル情報を永続化
+- タスク完了を返す
 
-Worker は以下を実行します:
-- airflow DBでタスクを `running` に更新
-- XComから対象タイルの情報を取得
-- storageへ `DELETE /images/rawtiles/18/10/20.png` を呼び出し
-- Backend の `DELETE /api/internal/tiles/{tile_id}` を呼び出し
-- Backendは `tiles` テーブルから該当レコード削除（圧縮版レコードは残る）
-- airflow DBでタスクを `success` に更新
-
-#### Step 9: スクリーンショット削除
-DAG設計では、各スクリーンショットを利用するすべてのタイル生成タスクとその子孫タスク（マージ、圧縮、削除すべて）が完了したとき、対応する削除タスク（`screenshot_cleanup_0`）が実行可能になります。
-
-`airflow-worker-capture-cleanup` は `screenshot_cleanup` キューからタスク（`"screenshot_cleanup_0"`）を取得します。
-
-Worker は以下を実行します:
-- airflow DBでタスクを `running` に更新
-- XComから対象スクリーンショットID（例: `"shot_abc123"`）を取得
-- storageへ `DELETE /images/screenshots/shot_abc123.png` でファイル削除
-- Backend の `DELETE /api/internal/screenshots/shot_abc123` を呼び出し
-- Backendは `screenshots` テーブルから該当レコード削除
-- airflow DBでタスクを `success` に更新
-
-#### Step 10: 完了とステータス確認
-Airflow DAGの全タスクが完了すると、dag_runは `success` 状態になります。
+#### Step 8: 完了とステータス確認
+Prefect Agentの全タスクが完了すると、flow_runは `Completed` 状態になります。
 
 ブラウザはポーリングで定期的に `GET /api/status` を呼び出します。
 
 Backend は以下を実行します:
 - gamedbから全ジョブの情報を取得
-- airflow DBからステータスを確認
+- prefect-serverのAPIからflow_run状態を確認
 - 各ジョブについて、生成されたタイル数を計算
 - 全ジョブの情報を配列で返却:
   ```json
@@ -893,7 +723,7 @@ GET http://backend:8000/tiles/1/10/21.avif
 #### Backend
 各タイルリクエストに対し、Backend は以下を実行します:
 - リクエストを受け取る（例: `GET /tiles/1/10/20.avif`）
-- storageにプロキシリクエスト: `GET http://storage:80/images/tiles/compressed/1/10/20.avif`
+- storageにプロキシリクエスト: `GET http://storage:80/images/tiles/5/10/20.avif`
 - storageからタイル画像バイナリを受け取る
 - ブラウザに返却:
   ```text
@@ -917,7 +747,6 @@ GET http://backend:8000/tiles/1/10/21.avif
 
 #### スクリーンショット撮影
 - ゲーム起動に時間がかかるため、撮影スループットがボトルネック。
-- 対策: `service-capture` と `airflow-worker-capture` のレプリカ数を確保し、並列度を維持。
 - 対策: スクリーンショットの撮影とクリップ、保存を非同期化し、限られたゲームプロセスでも高スループットを実現。
 
 #### タイル処理
@@ -947,20 +776,19 @@ GET http://backend:8000/tiles/1/10/21.avif
 ## 6. 重要な設計原則
 
 ### 6.1 責務の明確化
-- **Backend**: ビジネスロジック、gamedb管理、Airflow制御、API提供、HTML配信。
-- **Airflow**: DAG定義、タスク生成、依存関係管理、スケジューリング。
-- **Airflow Workers**: タスク実行、Service呼び出し、Backend APIとの連携。
+- **Backend**: ビジネスロジック、gamedb管理、Prefect制御、API提供、HTML配信。
+- **Prefect Server**: Flow実行管理、タスク状態追跡、メタデータ管理。
+- **Prefect Agent**: Flow実行、動的タスク生成、Service呼び出し、Backend APIとの連携。
 - **Services（service-*）**: 単一の専門処理のみを実行。ステートレス。他サービスやBackendの知識を持たない。
 - **Storage**: ファイルのCRUD操作のみ。HTTPインターフェース。
 
 ### 6.2 変更耐性
-- Service の処理ロジック変更は、Backend や Airflow に影響しない。
-- Airflow DAGの構造変更は Service に影響しない。
-- Backend の API設計により、データ永続化の詳細が Workers に漏えいしない。
+- Service の処理ロジック変更は、Backend や Prefect に影響しない。
+- Prefect Flowの構造変更は Service に影響しない。
+- Backend の API設計により、データ永続化の詳細が Prefect Agent に漏えいしない。
 
 ### 6.3 段階的処理の利点
 - **メモリ効率**: 未圧縮タイルを早期削除することで、ストレージ使用量を抑制。
 - **並列性**: 切り出し、マージ、圧縮を独立したタスクにすることで、高い並列度を実現。
 - **失敗時の復旧**: 各段階が独立しているため、失敗したタスクのみ再実行可能。
 - **柔軟性**: 圧縮品質やズームレベル範囲の変更が容易。
-

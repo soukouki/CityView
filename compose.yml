@@ -163,18 +163,6 @@ services:
     deploy:
       replicas: 2
 
-  airflow-worker-tile-cleanup:
-    <<: *x-airflow-common
-    command: celery worker -q tile_cleanup --concurrency 2
-    deploy:
-      replicas: 2
-
-  airflow-worker-capture-cleanup:
-    <<: *x-airflow-common
-    command: celery worker -q screenshot_cleanup --concurrency 2
-    deploy:
-      replicas: 2
-
   # --- Processing Service Layer ---
   service-capture:
     build: ./service-capture
