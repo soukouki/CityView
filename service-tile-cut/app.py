@@ -4,10 +4,6 @@ import requests
 import io
 import os
 import logging
-import time
-import threading
-from collections import OrderedDict
-from threading import Lock
 
 # ロギング設定
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -18,52 +14,6 @@ app = Flask(__name__)
 # 環境変数から設定を読み込み
 STORAGE_URL = os.getenv('STORAGE_URL', 'http://storage')
 TILE_SIZE = int(os.getenv('TILE_SIZE', '512'))
-MAX_CACHE_ENTRIES = int(os.getenv('MAX_CACHE_ENTRIES', '20'))  # 最大キャッシュ数
-CACHE_MAX_AGE = int(os.getenv('CACHE_MAX_AGE', '300'))  # キャッシュ最大保持時間（秒）
-CLEANUP_INTERVAL = int(os.getenv('CLEANUP_INTERVAL', '30'))  # クリーンアップ間隔（秒）
-
-# 画像キャッシュ（LRU）
-image_cache = OrderedDict()
-cache_lock = Lock()
-
-class CacheEntry:
-    def __init__(self, image: Image.Image):
-        self.image = image
-        self.timestamp = time.time()
-        self.access_count = 0
-    
-    def update_access(self):
-        """アクセス情報を更新"""
-        self.access_count += 1
-
-def get_cached_image(image_path: str) -> Image.Image:
-    """キャッシュから画像を取得、なければダウンロードしてキャッシュ（参照を返す）"""
-    with cache_lock:
-        # キャッシュヒット
-        if image_path in image_cache:
-            entry = image_cache[image_path]
-            entry.update_access()
-            # LRUのため最後に移動
-            image_cache.move_to_end(image_path)
-            logger.debug(f"キャッシュヒット: {image_path} (アクセス数: {entry.access_count})")
-            return entry.image  # コピーせず参照を返す
-    
-    # キャッシュミス: ダウンロード
-    logger.info(f"画像ダウンロード: {image_path}")
-    image = download_image(image_path)
-    image.load()  # 画像をメモリに読み込む
-    
-    with cache_lock:
-        # LRUキャッシュ: 最大数を超えたら最も古いエントリを削除
-        if len(image_cache) >= MAX_CACHE_ENTRIES and len(image_cache) > 0:
-            oldest_key, oldest_entry = image_cache.popitem(last=False)
-            oldest_entry.image.close()
-            logger.info(f"LRUキャッシュ削除: {oldest_key} (キャッシュ数: {len(image_cache)})")
-        
-        image_cache[image_path] = CacheEntry(image)
-        logger.debug(f"キャッシュ追加: {image_path} (キャッシュ数: {len(image_cache)})")
-    
-    return image
 
 def download_image(image_path: str) -> Image.Image:
     """storage から画像をダウンロードして PIL.Image オブジェクトを返す"""
@@ -95,34 +45,6 @@ def upload_tile(tile_path: str, image_data: bytes) -> None:
     except requests.exceptions.RequestException as e:
         logger.error(f"タイル保存失敗: {tile_path}, エラー: {str(e)}")
         raise
-
-def cleanup_old_cache():
-    """古いキャッシュエントリを定期的に削除"""
-    while True:
-        try:
-            time.sleep(CLEANUP_INTERVAL)
-            current_time = time.time()
-            
-            with cache_lock:
-                expired_keys = []
-                for key, entry in image_cache.items():
-                    if current_time - entry.timestamp > CACHE_MAX_AGE:
-                        expired_keys.append(key)
-                
-                for key in expired_keys:
-                    entry = image_cache.pop(key)
-                    entry.image.close()
-                    logger.info(f"期限切れキャッシュ削除: {key} (経過時間: {current_time - entry.timestamp:.1f}秒)")
-                
-                if expired_keys:
-                    logger.info(f"クリーンアップ完了: {len(expired_keys)}件削除 (残り: {len(image_cache)}件)")
-        except Exception as e:
-            logger.error(f"キャッシュクリーンアップでエラー: {str(e)}", exc_info=True)
-
-# クリーンアップスレッドの開始
-cleanup_thread = threading.Thread(target=cleanup_old_cache, daemon=True)
-cleanup_thread.start()
-logger.info(f"キャッシュクリーンアップスレッド起動 (間隔: {CLEANUP_INTERVAL}秒, 最大保持: {CACHE_MAX_AGE}秒, 最大件数: {MAX_CACHE_ENTRIES})")
 
 @app.route('/cut', methods=['POST'])
 def cut_tile():
@@ -196,6 +118,7 @@ def cut_tile():
         
         # 各スクリーンショット画像を処理
         for img_info in images:
+            img = None
             overlap_img = None
             try:
                 # 必須フィールドの検証
@@ -207,9 +130,10 @@ def cut_tile():
                     logger.warning(f"画像情報が不完全: {img_info}")
                     continue
                 
-                # 画像をキャッシュから取得（またはダウンロード）
-                # 参照を取得（コピーしない）
-                img = get_cached_image(img_path)
+                # 画像をダウンロード
+                logger.info(f"画像ダウンロード: {img_path}")
+                img = download_image(img_path)
+                img.load()  # 画像をメモリに読み込む
                 img_width, img_height = img.size
                 
                 # 画像の範囲（スクショ座標系、ピクセル単位）
@@ -225,6 +149,7 @@ def cut_tile():
                     logger.debug(f"オーバーラップなし: {img_path} "
                                f"img=({img_left},{img_top})-({img_right},{img_bottom}) "
                                f"tile=({tile_left},{tile_top})-({tile_right},{tile_bottom})")
+                    img.close()
                     continue  # オーバーラップなし
                 
                 # オーバーラップ領域の計算（スクショ座標系）
@@ -254,20 +179,24 @@ def cut_tile():
                 tile_image.paste(overlap_img, (paste_left, paste_top))
                 
                 overlap_img.close()
+                img.close()
                 overlap_img = None
+                img = None
                 processed_images += 1
                 
             except Exception as e:
                 logger.warning(f"画像処理中にエラー: {img_info}, エラー: {str(e)}", exc_info=True)
                 if overlap_img is not None:
                     overlap_img.close()
+                if img is not None:
+                    img.close()
                 continue
         
         logger.info(f"処理した画像数: {processed_images}/{len(images)}")
         
-        # PNG形式でエンコード（未圧縮）
+        # PNG形式でエンコード
         output_buffer = io.BytesIO()
-        tile_image.save(output_buffer, format='PNG', compress_level=0)
+        tile_image.save(output_buffer, format='PNG', compress_level=3) # あるていどの圧縮はしておく。無圧縮では4000x5000マップで4倍ズーム時にrawtilesが34GBとかになる
         tile_image.close()
         output_buffer.seek(0)
         tile_data = output_buffer.getvalue()
@@ -284,14 +213,8 @@ def cut_tile():
 @app.route('/health', methods=['GET'])
 def health_check():
     """ヘルスチェックエンドポイント"""
-    with cache_lock:
-        cache_size = len(image_cache)
-        total_access = sum(entry.access_count for entry in image_cache.values())
     return jsonify({
-        "status": "healthy",
-        "cache_entries": cache_size,
-        "max_cache_entries": MAX_CACHE_ENTRIES,
-        "total_cache_accesses": total_access
+        "status": "healthy"
     }), 200
 
 if __name__ == '__main__':

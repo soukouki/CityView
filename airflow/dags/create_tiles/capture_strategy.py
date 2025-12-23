@@ -6,8 +6,8 @@ SMALL_GROUP_SIZE = 5 # 最初の斜め移動用のグループ分割のサイズ
 
 class CaptureStrategy:
     def __init__(self, map_x: int, map_y: int, delta: int):
-        self.map_x = map_x
-        self.map_y = map_y
+        self.map_x = map_x - 1 # うっかりマップサイズと最大座標を間違えてしまったので、-1しておく
+        self.map_y = map_y - 1
         self.delta = delta
     
     def generate_capture_areas_groups(self) -> List[List[Dict]]:

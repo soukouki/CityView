@@ -22,29 +22,42 @@ MAP_TILES_X=4384
 MAP_TILES_Y=5040
 
 # 撮影時のズームレベル
-# quarter : 0.25倍、6段階拡大、最大ズームアウト
-# half    : 0.5倍、3段階拡大
-# normal  : 1倍、標準
-# double  : 2倍、3段階拡大、最大ズームイン
-ZOOM_LEVEL=quarter
+# one_eighth : 0.125倍、6段階縮小、最大ズームアウト
+# quarter    : 0.25倍、5段階縮小
+# half       : 0.5倍、3段階縮小
+# normal     : 1倍、標準
+# double     : 2倍、3段階拡大、最大ズームイン
+ZOOM_LEVEL=one_eighth
 
 # 地図タイルについて
 TILE_SIZE=512
-TILE_QUALITY_MAX_ZOOM=lossless
+TILE_QUALITY_MAX_ZOOM=lossless # losslessまたは0〜100の整数
 TILE_QUALITY_OTHER=lossless
+
+# 地図タイルのグループサイズ
+# 小さくするとタスクグループが小さくなりタイル処理に関わる並列数が上がるが、タスクオーケストレータが重くなる
+# 巨大なマップ(4000x5000とか)でdoubleズームで撮るなら大きめ(64とか)が良い
+# マップが小さい/ズームレベルが縮小側/並列数を上げたい場合は小さめ(8とか)が良い
+TILE_GROUP_SIZE=16
 
 # スクショ撮影について
 # 推奨値 : quarter=320, half=160, normal=80, double=40
+# メモリが足りない場合は小さくする
 DELTA=320
 
 #---------------------------------------
 # ユーザー向け入力欄ここまで
+# 設定後は./env-genを実行して.envを生成するのをお忘れなく！(n敗)
+# 反映する際にはsudo docker-compose down / sudo docker-compose up -dを実行してコンテナを作り直してください
 #---------------------------------------
 
 CROP_OFFSET_Y=64   # メニューバー分
 
 # 補正後PAKSIZE
 case $ZOOM_LEVEL in
+  one_eighth)
+    ADJUSTED_PAKSIZE=$(( PAKSIZE / 8 ))
+    ;;
   quarter)
     ADJUSTED_PAKSIZE=$(( PAKSIZE / 4 ))
     ;;
@@ -96,6 +109,7 @@ MAP_TILES_Y=$MAP_TILES_Y
 TILE_SIZE=$TILE_SIZE
 TILE_QUALITY_MAX_ZOOM=$TILE_QUALITY_MAX_ZOOM
 TILE_QUALITY_OTHER=$TILE_QUALITY_OTHER
+TILE_GROUP_SIZE=$TILE_GROUP_SIZE
 
 # スクショ撮影について
 DELTA=$DELTA

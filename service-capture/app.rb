@@ -50,6 +50,7 @@ module ServiceCapture
     X11_CONTROLLER = ServiceCapture::X11Controller.new(
       screen_width: ENV.fetch("CAPTURE_SCREEN_WIDTH").to_i,
       screen_height: ENV.fetch("CAPTURE_SCREEN_HEIGHT").to_i,
+      redraw_wait: ENV.fetch("CAPTURE_REDRAW_WAIT_SECONDS", "0.2").to_f,
     )
 
     GAME_MANAGER = ServiceCapture::GameProcessManager.new(
@@ -125,8 +126,8 @@ module ServiceCapture
         halt 400, json(error: "invalid_output_path", message: "output_path cannot be empty")
       end
       zoom_level = payload["zoom_level"]
-      if !["quarter", "half", "normal", "double"].include?(zoom_level)
-        halt 400, json(error: "invalid_zoom_level", message: "zoom_level must be one of quarter, half, normal, double")
+      if !["one_eighth", "quarter", "half", "normal", "double"].include?(zoom_level)
+        halt 400, json(error: "invalid_zoom_level", message: "zoom_level must be one of one_eighth, quarter, half, normal, double")
       end
 
       # Ensure game process for this save is running (restart if save differs).

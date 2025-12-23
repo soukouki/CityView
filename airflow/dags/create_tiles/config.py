@@ -25,8 +25,7 @@ ENABLE_HEIGHT = IMAGE_HEIGHT - 2 * IMAGE_MARGIN_HEIGHT
 TILE_QUALITY_MAX_ZOOM = os.environ.get('TILE_QUALITY_MAX_ZOOM', '60') # int or "lossless"
 TILE_QUALITY_OTHER = os.environ.get('TILE_QUALITY_OTHER', '30')
 ZOOM_LEVEL = os.environ.get('ZOOM_LEVEL', 'normal')
-# ZOOM_LEVELはquarter, half, normal, doubleのいずれか
-if ZOOM_LEVEL not in ['quarter', 'half', 'normal', 'double']:
+if ZOOM_LEVEL not in ['one_eighth', 'quarter', 'half', 'normal', 'double']:
     raise ValueError('Invalid ZOOM_LEVEL value')
 TILE_GROUP_SIZE = int(os.environ.get('TILE_GROUP_SIZE', '64'))
 

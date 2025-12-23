@@ -1,6 +1,6 @@
 
-MAP_X = ARGV[0].to_i
-MAP_Y = ARGV[1].to_i
+MAP_X = ARGV[0].to_i - 1
+MAP_Y = ARGV[1].to_i - 1
 DELTA = ARGV[2].to_i
 
 # ゲーム座標(x, y)からスクショ座標で左側に移動する

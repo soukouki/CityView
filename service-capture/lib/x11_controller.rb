@@ -4,9 +4,10 @@ require_relative "command_runner"
 
 module ServiceCapture
   class X11Controller
-    def initialize(screen_width:, screen_height:)
+    def initialize(screen_width:, screen_height:, redraw_wait:)
       @screen_width = screen_width
       @screen_height = screen_height
+      @redraw_wait = redraw_wait
     end
 
     def key(keysym)
@@ -61,15 +62,15 @@ module ServiceCapture
     def zoom_in
       # 画面の中央にマウスを移動してPage_Up(3回)
       mousemove(@screen_width / 2, @screen_height / 2)
-      sleep 0.02
-      3.times { key("Page_Up"); sleep 0.02 }
+      sleep 0.05
+      3.times { key("Page_Up"); sleep @redraw_wait }
     end
 
     def zoom_out
       # 画面の中央にマウスを移動してPage_Down(3回)
       mousemove(@screen_width / 2, @screen_height / 2)
-      sleep 0.02
-      3.times { key("Page_Down"); sleep 0.02 }
+      sleep 0.05
+      3.times { key("Page_Down"); sleep @redraw_wait }
     end
   end
 end

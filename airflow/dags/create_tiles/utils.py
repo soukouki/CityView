@@ -27,8 +27,8 @@ def game_tile_to_screen_lefttop_coord(tile_x: int, tile_y: int) -> tuple[int, in
 def screen_coord_to_game_tile(screen_x: int, screen_y: int) -> tuple[int, int]:
     X = screen_x - IMAGE_MARGIN_WIDTH
     Y = screen_y - IMAGE_MARGIN_HEIGHT
-    tile_x = (X + 2 * Y) // (ADJUSTED_PAKSIZE)
-    tile_y = (2 * Y - X) // (ADJUSTED_PAKSIZE)
+    tile_x = (X + 2 * Y) // ADJUSTED_PAKSIZE
+    tile_y = (2 * Y - X) // ADJUSTED_PAKSIZE
     return tile_x, tile_y
 
 # スクショ座標系と地図タイル座標系の変換式

@@ -20,13 +20,14 @@ x-airflow-common: &x-airflow-common
       DELTA: ${DELTA}
       MAP_TILES_X: ${MAP_TILES_X}
       MAP_TILES_Y: ${MAP_TILES_Y}
+      ZOOM_LEVEL: ${ZOOM_LEVEL}
       IMAGE_WIDTH: ${IMAGE_WIDTH}
       IMAGE_HEIGHT: ${IMAGE_HEIGHT}
       IMAGE_MARGIN_WIDTH: ${IMAGE_MARGIN_WIDTH}
       IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
       TILE_QUALITY_MAX_ZOOM: ${TILE_QUALITY_MAX_ZOOM}
       TILE_QUALITY_OTHER: ${TILE_QUALITY_OTHER}
-      TILE_GROUP_SIZE: 64
+      TILE_GROUP_SIZE: ${TILE_GROUP_SIZE}
       TZ: ${TZ}
     volumes:
       - ./airflow/dags:/opt/airflow/dags:ro
@@ -179,15 +180,14 @@ services:
       STORAGE_URL: http://storage
       GAME_EXECUTABLE: simutrans-extended
       PAKSET_NAME: ${PAKSET_NAME}
-      ZOOM_LEVEL: ${ZOOM_LEVEL}
       CAPTURE_SCREEN_WIDTH: ${CAPTURE_WIDTH}
       CAPTURE_SCREEN_HEIGHT: ${CAPTURE_HEIGHT}
       CAPTURE_CROP_WIDTH: ${IMAGE_WIDTH}
       CAPTURE_CROP_HEIGHT: ${IMAGE_HEIGHT}
       CAPTURE_CROP_OFFSET_X: ${CROP_OFFSET_X}
       CAPTURE_CROP_OFFSET_Y: ${CROP_OFFSET_Y}
-      CAPTURE_REDRAW_WAIT_SECONDS: 0.3 # ズームレベルが低い場合は描画に時間がかかることがあるため長めに設定すること
-      CAPTURE_SCROT_SETTLE_SECONDS: 0.3
+      CAPTURE_REDRAW_WAIT_SECONDS: 0.4 # ズームレベルが低い場合は描画に時間がかかることがあるため長めに設定すること
+      CAPTURE_SCROT_SETTLE_SECONDS: 0.1 # scrotがフレームバッファを読み込むまでの待機時間
       CAPTURE_SCROT_TIMEOUT_SECONDS: 30
       CAPTURE_CROP_TIMEOUT_SECONDS: 30
       CAPTURE_UPLOAD_TIMEOUT_SECONDS: 30
@@ -234,11 +234,6 @@ services:
     environment:
       STORAGE_URL: http://storage
       TILE_SIZE: ${TILE_SIZE}
-      # これを上げるとめちゃくちゃメモリ消費が増えるので注意。(1につき1GB増えるイメージ)
-      # コンテナ間通信のオーバーヘッドが気になって避けてたけれど、あまりにもメモリを食うので0にした。
-      MAX_CACHE_ENTRIES: 0
-      CACHE_MAX_AGE: 300
-      CLEANUP_INTERVAL: 30
     volumes:
       - ./volume-storage:/data
     deploy:

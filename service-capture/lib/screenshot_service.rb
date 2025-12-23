@@ -27,7 +27,7 @@ module ServiceCapture
       @scrot_timeout = scrot_timeout
       @crop_timeout = crop_timeout
       @upload_timeout = upload_timeout
-      @current_zoom_level = "normal" # quarter, half, normal or double
+      @current_zoom_level = "normal" # one_eighth, quarter, half, normal, double
 
       FileUtils.mkdir_p("/tmp/service-capture")
     end
@@ -178,41 +178,18 @@ module ServiceCapture
 
     # 愚直に書きすぎたかもしれない
     def zoom!(level)
-      case [@current_zoom_level, level] # [from, to]
-      when ["quarter", "quarter"]
-        # no-op
-      when ["quarter", "half"]
-        @x11_controller.zoom_in
-      when ["quarter", "normal"]
-        2.times { @x11_controller.zoom_in }
-      when ["quarter", "double"]
-        3.times { @x11_controller.zoom_in }
-      when ["half", "quarter"]
-        @x11_controller.zoom_out
-      when ["half", "half"]
-        # no-op
-      when ["half", "normal"]
-        @x11_controller.zoom_in
-      when ["half", "double"]
-        2.times { @x11_controller.zoom_in }
-      when ["normal", "quarter"]
-        2.times { @x11_controller.zoom_out }
-      when ["normal", "half"]
-        @x11_controller.zoom_out
-      when ["normal", "normal"]
-        # no-op
-      when ["normal", "double"]
-        @x11_controller.zoom_in
-      when ["double", "quarter"]
-        3.times { @x11_controller.zoom_out }
-      when ["double", "half"]
-        2.times { @x11_controller.zoom_out }
-      when ["double", "normal"]
-        @x11_controller.zoom_out
-      when ["double", "double"]
-        # no-op
+      zoom_levels = ["one_eighth", "quarter", nil, "half", nil, nil, "normal", nil, nil, "double"] # ゲーム内でのズームレベル対応
+      current_index = zoom_levels.index(@current_zoom_level)
+      target_index = zoom_levels.index(level)
+      raise "invalid current zoom level #{@current_zoom_level}" if current_index.nil?
+      raise "invalid target zoom level #{level}" if target_index.nil?
+      puts "[zoom] from #{@current_zoom_level}(#{current_index}) to #{level}(#{target_index})"
+      if target_index < current_index
+        (current_index - target_index).times { @x11_controller.zoom_out }
+      elsif target_index > current_index
+        (target_index - current_index).times { @x11_controller.zoom_in }
       else
-        raise "invalid zoom level transition: from=#{@current_zoom_level} to=#{level}"
+        # no-op
       end
       @current_zoom_level = level
     end
