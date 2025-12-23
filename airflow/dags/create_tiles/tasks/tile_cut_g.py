@@ -10,12 +10,12 @@ from create_tiles.config import (
     IMAGE_HEIGHT,
     IMAGE_MARGIN_WIDTH,
     IMAGE_MARGIN_HEIGHT,
+    SAVE_DATA_NAME,
 )
 from create_tiles.utils import map_tile_to_screen_coord, parse_xy_str, check_exists
 
 @task
 def tile_cut_g(gx: int, gy: int, related_areas: list, capture_results: list, estimate_results: list):
-    save_data_name = get_current_context()['params']['save_data_name']
     print(f"Processing tile cut group at ({gx}, {gy}) with {len(related_areas)} related areas")
     for area in related_areas:
         print(f"  Related area: x{area['x']}, y{area['y']}")
@@ -94,7 +94,7 @@ def tile_cut_g(gx: int, gy: int, related_areas: list, capture_results: list, est
             if not images:
                 continue
             
-            output_path = f"/images/rawtiles/{save_data_name}/{MAX_Z}/{tx}/{ty}.png"
+            output_path = f"/images/rawtiles/{SAVE_DATA_NAME}/{MAX_Z}/{tx}/{ty}.png"
             if check_exists(output_path):
                 print(f"  Output already exists at {output_path}, skipping tile cut.")
                 cut_tiles[f"z{MAX_Z}_x{tx}_y{ty}"] = output_path

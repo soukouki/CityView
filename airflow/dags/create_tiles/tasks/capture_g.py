@@ -1,13 +1,12 @@
 import requests
 from airflow.operators.python import get_current_context
 from airflow.decorators import task
-from create_tiles.config import SERVICE_CAPTURE_URL, ZOOM_LEVEL
+from create_tiles.config import SERVICE_CAPTURE_URL, ZOOM_LEVEL, SAVE_DATA_NAME
 from create_tiles.utils import check_exists
 
 @task
 def capture_g(tasks: list):
     # raise NotImplementedError("debugging") # すべてのタスクを失敗させたいときに使う
-    save_data_name = get_current_context()['params']['save_data_name']
     print(f"Capturing group with {len(tasks)} tasks")
     for task in tasks:
         print(f"  Task: x={task['x']}, y={task['y']}")
@@ -15,15 +14,14 @@ def capture_g(tasks: list):
     for task in tasks:
         x = task['x']
         y = task['y']
-        print(f"Capturing area {save_data_name} at ({x}, {y})")
-        output_path = f"/images/screenshots/{save_data_name}/x{x}_y{y}.png"
+        print(f"Capturing area at ({x}, {y})")
+        output_path = f"/images/screenshots/{SAVE_DATA_NAME}/x{x}_y{y}.png"
         # 撮影はあまりにも時間がかかるので、すでにストレージに存在する場合はスキップする
         if check_exists(output_path):
             print(f"  Output already exists at {output_path}, skipping capture.")
             captured_results[f"x{x}_y{y}"] = output_path
             continue
         capture(
-            save_data_name=save_data_name,
             x=x,
             y=y,
             output_path=output_path,
@@ -31,10 +29,10 @@ def capture_g(tasks: list):
         captured_results[f"x{x}_y{y}"] = output_path
     return captured_results
 
-def capture(save_data_name: str, x: int, y: int, output_path: str):
+def capture(x: int, y: int, output_path: str):
     url = f"{SERVICE_CAPTURE_URL}/capture"
     payload = {
-        "save_data_name": save_data_name,
+        "save_data_name": SAVE_DATA_NAME,
         "x": x,
         "y": y,
         "output_path": output_path,

@@ -6,7 +6,6 @@ from create_tiles.utils import parse_zxy_str, check_exists
 
 @task
 def tile_compress_g(z: int, gx: int, gy: int, tile_results: dict, quality: str):
-    save_data_name = get_current_context()['params']['save_data_name']
     print(f"Processing tile compress group at z={z}, ({gx}, {gy}) with {len(tile_results)} tiles")
     
     for key, input_path in tile_results.items():

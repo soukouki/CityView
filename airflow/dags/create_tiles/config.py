@@ -28,6 +28,7 @@ ZOOM_LEVEL = os.environ.get('ZOOM_LEVEL', 'normal')
 if ZOOM_LEVEL not in ['one_eighth', 'quarter', 'half', 'normal', 'double']:
     raise ValueError('Invalid ZOOM_LEVEL value')
 TILE_GROUP_SIZE = int(os.environ.get('TILE_GROUP_SIZE', '64'))
+SAVE_DATA_NAME = os.environ.get('SAVE_DATA_NAME', 'default_save')
 
 # その他
 max_width = (ADJUSTED_PAKSIZE // 2) * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_WIDTH * 4 # 余裕を持ってマージンを倍に見ておく

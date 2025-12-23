@@ -82,7 +82,7 @@ module ServiceCapture
       exe_path = File.join(@executable_dir, @executable)
       unless File.exist?(exe_path)
         raise ServiceCapture::Errors::BadRequest.new(
-          "missing_game_executable",
+          "missing_SIMUTRANS_EXECUTABLE",
           "game executable not found: #{exe_path}"
         )
       end

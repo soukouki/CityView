@@ -185,9 +185,9 @@ module ServiceCapture
       raise "invalid target zoom level #{level}" if target_index.nil?
       puts "[zoom] from #{@current_zoom_level}(#{current_index}) to #{level}(#{target_index})"
       if target_index < current_index
-        (current_index - target_index).times { @x11_controller.zoom_out }
+        (current_index - target_index).times { @x11_controller.zoom_out; sleep @redraw_wait }
       elsif target_index > current_index
-        (target_index - current_index).times { @x11_controller.zoom_in }
+        (target_index - current_index).times { @x11_controller.zoom_in; sleep @redraw_wait }
       else
         # no-op
       end

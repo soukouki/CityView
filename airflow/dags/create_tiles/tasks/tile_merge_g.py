@@ -2,12 +2,11 @@ import requests
 from airflow.operators.python import get_current_context
 from airflow.decorators import task
 from airflow.operators.python import get_current_context
-from create_tiles.config import SERVICE_TILE_MERGE_URL, TILE_GROUP_SIZE
+from create_tiles.config import SERVICE_TILE_MERGE_URL, TILE_GROUP_SIZE, SAVE_DATA_NAME
 from create_tiles.utils import parse_zxy_str, check_exists
 
 @task
 def tile_merge_g(z: int, gx: int, gy: int, child_results: list):
-    save_data_name = get_current_context()['params']['save_data_name']
     print(f"Processing tile merge group at z={z}, ({gx}, {gy}) with {len(child_results)} child results")
     for child_result in child_results:
         print(" Child result:")
@@ -43,7 +42,7 @@ def tile_merge_g(z: int, gx: int, gy: int, child_results: list):
             
             # 子タイルが1つ以上あればマージ
             if tiles_to_merge:
-                output_path = f"/images/rawtiles/{save_data_name}/{z}/{tx}/{ty}.png"
+                output_path = f"/images/rawtiles/{SAVE_DATA_NAME}/{z}/{tx}/{ty}.png"
                 if check_exists(output_path):
                     print(f"  Output already exists at {output_path}, skipping merge.")
                     merged_tiles[f"z{z}_x{tx}_y{ty}"] = output_path

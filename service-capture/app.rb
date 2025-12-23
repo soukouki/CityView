@@ -50,13 +50,12 @@ module ServiceCapture
     X11_CONTROLLER = ServiceCapture::X11Controller.new(
       screen_width: ENV.fetch("CAPTURE_SCREEN_WIDTH").to_i,
       screen_height: ENV.fetch("CAPTURE_SCREEN_HEIGHT").to_i,
-      redraw_wait: ENV.fetch("CAPTURE_REDRAW_WAIT_SECONDS", "0.2").to_f,
     )
 
     GAME_MANAGER = ServiceCapture::GameProcessManager.new(
-      executable: ENV.fetch("GAME_EXECUTABLE", "simutrans-extended"),
+      executable: ENV.fetch("SIMUTRANS_EXECUTABLE", "simutrans-extended"),
       # Host expects binaries mounted at /app/bin by compose
-      executable_dir: ENV.fetch("GAME_EXECUTABLE_DIR", "/app/bin"),
+      executable_dir: ENV.fetch("SIMUTRANS_EXECUTABLE_DIR", "/app/bin"),
       pakset_name: ENV.fetch("PAKSET_NAME"),
       display: ENV.fetch("DISPLAY", ":99"),
       screen_width: ENV.fetch("CAPTURE_SCREEN_WIDTH").to_i,
@@ -112,6 +111,9 @@ module ServiceCapture
       save_data_name = payload["save_data_name"].to_s
       if save_data_name.empty?
         halt 400, json(error: "invalid_save_data_name", message: "save_data_name cannot be empty")
+      end
+      if File.exist?(File.join("/root/simutrans/save", save_data_name) + ".sve") == false
+        halt 400, json(error: "save_data_not_found", message: "save data not found")
       end
       x = Integer(payload["x"])
       if x < 0
