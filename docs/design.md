@@ -23,21 +23,22 @@
 #### db (PostgreSQL)
 - **役割**: データベースサーバー
 - **責務**:
-  - アプリケーションデータの永続化（`gamedb`）
-  - Prefectメタデータの永続化（`gamedb`内の`prefect_*`テーブル）
+  - アプリケーションデータの永続化（`app`）
+  - Prefectメタデータの永続化（`app`内の`prefect_*`テーブル）
 - **接続元**:
-  - backend（`gamedb` への読み書き）
-  - prefect-server（`gamedb` 内の `prefect_*` テーブルへの読み書き）
-  - prefect-agent（`gamedb` への読み書き：Backend API経由）
+  - backend（`app` への読み書き）
+  - prefect-server（`app` 内の `prefect_*` テーブルへの読み書き）
+  - prefect-agent（`app` への読み書き：Backend API経由）
 - **ポート**: `5432`
 - **データベース**:
-  - `gamedb`: アプリケーションデータおよびPrefectメタデータ
+  - `app`: アプリケーションデータおよびPrefectメタデータ
     - `jobs`: ジョブ管理（`job_id`, `game_id`, `save_data_name`, `status`, `flow_run_id`, `created_at` など）
     - `savedatas`: セーブデータ情報
     - `screenshots`: スクリーンショットと推定座標（`screenshot_id`, `job_id`, `x`, `y`, `estimated_x`, `estimated_y`, `filepath`, `status` など）
     - `tiles`: タイルメタデータ（`tile_id`, `job_id`, `z`, `x`, `y`, `filepath`, `compressed`, `source_type` など）
       - `compressed`: 圧縮済みかどうか（boolean）
       - `source_type`: タイルの生成元（`screenshot`, `merged`）
+  - `prefect`: Prefect内部用データベース
     - `prefect_*`: Prefectメタデータ（Prefect Serverが自動作成・管理）
 
 #### storage
@@ -90,14 +91,14 @@
 - **役割**: バックエンドAPIサーバー（Ruby + Sinatra）
 - **責務**:
   - ビジネスロジック実行
-  - `gamedb` への読み書き
+  - `app` への読み書き
   - Prefect Flow起動
   - 管理画面/マップ閲覧画面のHTML配信
   - 静的ファイル（CSS、JavaScript等）の配信
   - タイル配信（storage へのリバースプロキシ）
   - 管理画面 API および内部 API 提供
 - **DB接続**:
-  - `gamedb`: 読み書き
+  - `app`: 読み書き
 - **呼び出し先**:
   - prefect-server: Flow起動
   - storage: タイル取得（配信用）
@@ -149,9 +150,9 @@
   - タスク状態の追跡
   - Web UIの提供
   - REST APIの提供
-  - `gamedb` 内の `prefect_*` テーブルへの読み書き
+  - `app` 内の `prefect_*` テーブルへの読み書き
 - **DB接続**:
-  - `gamedb`: 読み書き（`prefect_*` テーブル）
+  - `app`: 読み書き（`prefect_*` テーブル）
 - **エンドポイント**:
 
   | メソッド | パス | 説明 |
@@ -180,7 +181,7 @@
   - backend: 結果の永続化（内部API）
 - **レプリカ数**: `2`
 - **環境変数**:
-  - `PREFECT_API_URL`: `http://prefect-server:4200/api`
+  - `PREFECT_API_URL`: `http://prefect-server:8003/api`
 - **処理フロー**:
   1. Prefect Server からフロー実行指示を取得
   2. Flow関数を実行（動的にタスクを生成・実行）
@@ -432,7 +433,7 @@ capture_{i}
 ユーザーは管理画面からゲームID（例: `"city01"`）とセーブデータ名（例: `"save_001"`）を指定して「タイル生成」ボタンを押下します。Backendは `POST /api/tiles/create` リクエストを受け取ります。
 
 Backendは以下を実行します:
-- gamedbに新しいジョブレコードを作成（`status='preparing'`）
+- appに新しいジョブレコードを作成（`status='preparing'`）
 - 撮影対象エリアのリストを計算
 - タイル生成パラメータを計算（最大ズーム、最小ズーム、タイル依存関係）
 - PrefectのFlow起動APIを呼び出し、`map_processing` Flowを起動
@@ -668,7 +669,7 @@ Prefect Agentの全タスクが完了すると、flow_runは `Completed` 状態�
 ブラウザはポーリングで定期的に `GET /api/status` を呼び出します。
 
 Backend は以下を実行します:
-- gamedbから全ジョブの情報を取得
+- appから全ジョブの情報を取得
 - prefect-serverのAPIからflow_run状態を確認
 - 各ジョブについて、生成されたタイル数を計算
 - 全ジョブの情報を配列で返却:
@@ -776,7 +777,7 @@ GET http://backend:8000/tiles/1/10/21.avif
 ## 6. 重要な設計原則
 
 ### 6.1 責務の明確化
-- **Backend**: ビジネスロジック、gamedb管理、Prefect制御、API提供、HTML配信。
+- **Backend**: ビジネスロジック、app管理、Prefect制御、API提供、HTML配信。
 - **Prefect Server**: Flow実行管理、タスク状態追跡、メタデータ管理。
 - **Prefect Agent**: Flow実行、動的タスク生成、Service呼び出し、Backend APIとの連携。
 - **Services（service-*）**: 単一の専門処理のみを実行。ステートレス。他サービスやBackendの知識を持たない。

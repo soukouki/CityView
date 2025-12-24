@@ -1,11 +1,8 @@
--- AirflowメタデータDB
-CREATE DATABASE airflow;
-
--- ゲームデータDB（既にPOSTGRES_DBで作成されるが、念のため）
--- CREATE DATABASE gamedb;
+-- PrefectメタデータDB
+CREATE DATABASE prefect;
 
 -- アプリケーションテーブル作成
-\c gamedb;
+\c app;
 
 CREATE TABLE IF NOT EXISTS jobs (
     job_id SERIAL PRIMARY KEY,

@@ -1,69 +1,15 @@
-
-# --- templates ---
-x-airflow-common: &x-airflow-common
-    build: ./airflow
-    environment:
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres@db:5432/airflow
-      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
-      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://postgres@db:5432/airflow
-      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-      AIRFLOW__API__AUTH_BACKEND: airflow.api.auth.backend.default
-      SERVICE_CAPTURE_URL: http://service-capture:5000
-      SERVICE_ESTIMATE_URL: http://service-estimate:5001
-      SERVICE_TILE_CUT_URL: http://service-tile-cut:5002
-      SERVICE_TILE_MERGE_URL: http://service-tile-merge:5003
-      SERVICE_TILE_COMPRESS_URL: http://service-tile-compress:5004
-      BACKEND_INTERNAL_URL: http://backend:8002
-      STORAGE_URL: http://storage
-      ADJUSTED_PAKSIZE: ${ADJUSTED_PAKSIZE}
-      SAVE_DATA_NAME: ${SAVE_DATA_NAME}
-      TILE_SIZE: ${TILE_SIZE}
-      DELTA: ${DELTA}
-      MAP_TILES_X: ${MAP_TILES_X}
-      MAP_TILES_Y: ${MAP_TILES_Y}
-      ZOOM_LEVEL: ${ZOOM_LEVEL}
-      IMAGE_WIDTH: ${IMAGE_WIDTH}
-      IMAGE_HEIGHT: ${IMAGE_HEIGHT}
-      IMAGE_MARGIN_WIDTH: ${IMAGE_MARGIN_WIDTH}
-      IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
-      TILE_QUALITY_MAX_ZOOM: ${TILE_QUALITY_MAX_ZOOM}
-      TILE_QUALITY_OTHER: ${TILE_QUALITY_OTHER}
-      TILE_GROUP_SIZE: ${TILE_GROUP_SIZE}
-      TZ: ${TZ}
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags:ro
-      - airflow-logs:/opt/airflow/logs
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
 services:
   # --- Infrastructure Layer ---
   db:
     image: postgres:15-alpine
     environment:
       POSTGRES_HOST_AUTH_METHOD: trust
-      POSTGRES_DB: gamedb
+      POSTGRES_DB: app
     volumes:
       - ./volume-db:/var/lib/postgresql/data
       - ./db/init-scripts:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    command: redis-server --appendonly yes
-    volumes:
-      - ./volume-redis:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -86,19 +32,19 @@ services:
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: postgres://postgres@db:5432/gamedb
-      AIRFLOW_API_URL: http://airflow-webserver:8080/api/v1
+      DATABASE_URL: postgres://postgres@db:5432/app
+      PREFECT_API_URL: http://prefect-server:4200/api
       STORAGE_URL: http://storage
     ports:
       - "8000:8000" # メイン
       - "8001:8001" # 管理画面
-      - "8002:8002" # Airflow連携用内部API
+      - "8002:8002" # Prefect Agent連携用内部API
     volumes:
       - ./volume-backend-logs:/app/logs
     depends_on:
       db:
         condition: service_healthy
-      airflow-webserver:
+      prefect-server:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8000/health"]
@@ -107,61 +53,90 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # --- Airflow Layer ---
-  airflow-init:
-    <<: *x-airflow-common
-    command: >
-      bash -c "
-      airflow db migrate &&
-      airflow users create --username admin --password admin --role Admin --email admin@example.com --firstname Airflow --lastname Admin &&
-      tail -f /dev/null
-      "
-
-  airflow-webserver:
-    <<: *x-airflow-common
-    command: webserver
+  # --- Prefect Layer ---
+  prefect-server:
+    image: prefecthq/prefect:2.16.0-python3.11
+    command: prefect server start --host 0.0.0.0
+    environment:
+      PREFECT_SERVER_API_HOST: 0.0.0.0
+      PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://postgres:postgres@db:5432/prefect
+      PREFECT_API_URL: http://prefect-server:4200/api
     ports:
-      - "8003:8080"
+      - "8003:4200"
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4200/api/health', timeout=5)"]
       interval: 30s
       timeout: 10s
-      retries: 5
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
 
-  airflow-scheduler:
-    <<: *x-airflow-common
-    command: scheduler
-
-  # --- Airflow Worker Layer ---
-  airflow-worker-capture:
-    <<: *x-airflow-common
-    command: celery worker -q capture --concurrency 6 # スクショ撮影内部での並列処理があるため、concurrencyは多めに設定
+  prefect-worker:
+    build: ./prefect
+    command: prefect worker start --pool default-agent-pool
+    environment:
+      PREFECT_LOGGING_LOG_PRINTS: "true"
+      PREFECT_API_URL: http://prefect-server:4200/api
+      SERVICE_CAPTURE_URL: http://service-capture:5000
+      SERVICE_ESTIMATE_URL: http://service-estimate:5001
+      SERVICE_TILE_CUT_URL: http://service-tile-cut:5002
+      SERVICE_TILE_MERGE_URL: http://service-tile-merge:5003
+      SERVICE_TILE_COMPRESS_URL: http://service-tile-compress:5004
+      BACKEND_INTERNAL_URL: http://backend:8002
+      STORAGE_URL: http://storage
+      TZ: ${TZ:-Asia/Tokyo}
+      ADJUSTED_PAKSIZE: ${ADJUSTED_PAKSIZE}
+      TILE_SIZE: ${TILE_SIZE}
+      DELTA: ${DELTA}
+      MAP_TILES_X: ${MAP_TILES_X}
+      MAP_TILES_Y: ${MAP_TILES_Y}
+      IMAGE_WIDTH: ${IMAGE_WIDTH}
+      IMAGE_HEIGHT: ${IMAGE_HEIGHT}
+      IMAGE_MARGIN_WIDTH: ${IMAGE_MARGIN_WIDTH}
+      IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
+      ENABLE_WIDTH: ${ENABLE_WIDTH}
+      ENABLE_HEIGHT: ${ENABLE_HEIGHT}
+      TILE_QUALITY_MAX_ZOOM: ${TILE_QUALITY_MAX_ZOOM}
+      TILE_QUALITY_OTHER: ${TILE_QUALITY_OTHER}
+      ZOOM_LEVEL: ${ZOOM_LEVEL}
+      TILE_GROUP_SIZE: ${TILE_GROUP_SIZE}
+      SAVE_DATA_NAME: ${SAVE_DATA_NAME}
+    volumes:
+      - ./prefect:/opt/prefect/flows:ro
+    depends_on:
+      prefect-server:
+        condition: service_healthy
     deploy:
       replicas: 2
+    restart: unless-stopped
 
-  airflow-worker-estimate:
-    <<: *x-airflow-common
-    command: celery worker -q estimate --concurrency 2
-    deploy:
-      replicas: 2
-
-  airflow-worker-tile-cut:
-    <<: *x-airflow-common
-    command: celery worker -q tile_cut --concurrency 4
-    deploy:
-      replicas: 2
-
-  airflow-worker-tile-merge:
-    <<: *x-airflow-common
-    command: celery worker -q tile_merge --concurrency 2
-    deploy:
-      replicas: 2
-
-  airflow-worker-tile-compress:
-    <<: *x-airflow-common
-    command: celery worker -q tile_compress --concurrency 2
-    deploy:
-      replicas: 2
+  # 初期化専用コンテナ（1回だけ実行）
+  prefect-init:
+    build: ./prefect
+    environment:
+      PREFECT_API_URL: http://prefect-server:4200/api
+    volumes:
+      - ./prefect:/opt/prefect/flows:ro
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    command: >
+      sh -c "
+      echo 'Waiting for Prefect API...' &&
+      sleep 1 &&
+      echo 'Deleting old work pool if exists...' &&
+      prefect work-pool delete default-agent-pool || true &&
+      echo 'Creating new work pool...' &&
+      prefect work-pool create default-agent-pool --type process &&
+      echo 'Deploying flows...' &&
+      cd /opt/prefect/flows &&
+      prefect deploy --all &&
+      echo 'Initialization complete!'
+      "
+    restart: "no"
 
   # --- Processing Service Layer ---
   service-capture:
@@ -250,7 +225,3 @@ services:
     deploy:
       replicas: 2
     restart: unless-stopped
-
-volumes:
-  airflow-logs:
-    driver: local

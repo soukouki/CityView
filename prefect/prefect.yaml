@@ -1,0 +1,12 @@
+name: cityview-workflows
+prefect-version: 2.16.0
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/flows
+
+deployments:
+  - name: create-tiles-default
+    entrypoint: create_tiles_flow.py:create_tiles
+    work_pool:
+      name: default-agent-pool
