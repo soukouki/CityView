@@ -1,5 +1,5 @@
 import requests
-from create_tiles.custom_task import priority_task
+from create_tiles.priority_task import priority_task
 from create_tiles.config import SERVICE_ESTIMATE_URL
 from create_tiles.utils import game_tile_to_screen_lefttop_coord, parse_xy_str
 

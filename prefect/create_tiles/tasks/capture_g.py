@@ -1,5 +1,5 @@
 import requests
-from create_tiles.custom_task import priority_task
+from create_tiles.priority_task import priority_task
 from create_tiles.config import SERVICE_CAPTURE_URL, ZOOM_LEVEL, SAVE_DATA_NAME
 from create_tiles.utils import check_exists
 

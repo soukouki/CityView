@@ -2,7 +2,7 @@ from prefect import flow
 from datetime import timedelta, datetime
 import math
 from collections import defaultdict
-from create_tiles.custom_task_runner import PriorityTaskRunner
+from create_tiles.priority_task_runner import PriorityTaskRunner
 from create_tiles.capture_strategy import CaptureStrategy
 from create_tiles.config import (
     DELTA,

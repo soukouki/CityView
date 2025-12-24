@@ -1,5 +1,5 @@
 import requests
-from create_tiles.custom_task import priority_task
+from create_tiles.priority_task import priority_task
 from create_tiles.config import SERVICE_TILE_COMPRESS_URL, TILE_GROUP_SIZE
 from create_tiles.utils import parse_zxy_str, check_exists
 
