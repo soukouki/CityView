@@ -5,7 +5,8 @@ import heapq
 from dataclasses import dataclass, field
 from prefect.task_runners import BaseTaskRunner, TaskConcurrencyType
 from prefect.states import State
-
+from prefect import Task
+from prefect.context import FlowRunContext
 
 @dataclass(order=True)
 class PrioritizedTask:
@@ -115,18 +116,30 @@ class PriorityTaskRunner(BaseTaskRunner):
         call: Callable[[], Coroutine[Any, Any, State]],
     ) -> None:
         """タスクをキューに追加"""
-        # 遅延初期化
         self._ensure_initialized()
         
-        # まだスケジューラが起動していなければ起動
         if not self._started:
             await self._start()
         
-        priority = self._pending_priority
-        task_type = self._pending_task_type
+        # callからtask_runを取得し、タグから優先度を読み取る
+        priority = 0
+        task_type = 'default'
         
-        self._pending_priority = 0
-        self._pending_task_type = "default"
+        # callがpartialの場合、keywordsからtask_runを取得
+        if hasattr(call, 'keywords'):
+            task_run = call.keywords.get('task_run')
+            if task_run and hasattr(task_run, 'tags'):
+                for tag in (task_run.tags or []):
+                    if tag.startswith('__priority:'):
+                        try:
+                            priority = int(tag.split(':', 1)[1])
+                        except (ValueError, IndexError):
+                            pass
+                    elif tag.startswith('__task_type:'):
+                        try:
+                            task_type = tag.split(':', 1)[1]
+                        except IndexError:
+                            pass
         
         loop = asyncio.get_event_loop()
         future = loop.create_future()

@@ -36,10 +36,10 @@ from create_tiles.tasks.tile_compress_g import tile_compress_g
     task_runner=PriorityTaskRunner(
         max_workers=14,
         concurrency_limits={
-            "capture": 9,      # 2 replicas × 4 threads + 1
-            "estimate": 3,     # 2 replicas + 1
-            "tile-cut": 5,     # 4 replicas + 1
-            "tile-merge": 3,   # 2 replicas + 1
+            "capture": 9,       # 2 replicas × 4 threads + 1
+            "estimate": 3,      # 2 replicas + 1
+            "tile-cut": 5,      # 4 replicas + 1
+            "tile-merge": 3,    # 2 replicas + 1
             "tile-compress": 3, # 2 replicas + 1
         },
     ),
@@ -70,10 +70,12 @@ def create_tiles():
         gx = group[0]['x']
         gy = group[0]['y']
         task_id = f"capture_g_x{gx}_y{gy}"
+        priority = group[0]['priority']
         capture_tasks[task_id] = capture_g.with_options(
             name=task_id,
             retries=3,
             retry_delay_seconds=300,
+            priority=priority,
         ).submit(tasks=tasks_in_group)
     # 撮影には依存関係は不要
     
@@ -106,10 +108,12 @@ def create_tiles():
                 if belonging_group != group: # 自分自身のestimateは不要
                     needed_estimate_tasks.append(estimate_tasks[f"estimate_g_x{gxb}_y{gyb}"])
         task_id = f"estimate_g_x{gx}_y{gy}"
+        priority = group[0]['priority']
         estimate_tasks[task_id] = estimate_g.with_options(
             name=task_id,
             retries=3,
             retry_delay_seconds=300,
+            priority=priority,
         ).submit(
             group=group, # estimate用のグループの情報をそのまま渡す
             capture_results=needed_capture_tasks,
