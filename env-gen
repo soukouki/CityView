@@ -50,9 +50,9 @@ TILE_QUALITY_OTHER=lossless
 TILE_GROUP_SIZE=16
 
 # スクショ撮影について
-# 推奨値 : quarter=320, half=160, normal=80, double=40
+# 推奨値 : quarter=640, half=320, normal=160, double=80
 # メモリが足りない場合は小さくする
-DELTA=320
+DELTA=640
 
 #---------------------------------------
 # ユーザー向け入力欄ここまで
@@ -95,8 +95,8 @@ IMAGE_MARGIN_WIDTH=$(( ADJUSTED_PAKSIZE * 2 ))
 IMAGE_MARGIN_HEIGHT=$(( ADJUSTED_PAKSIZE ))
 
 # 糊代を含めたスクショ画像サイズ
-IMAGE_WIDTH=$(( DELTA * ADJUSTED_PAKSIZE + IMAGE_MARGIN_WIDTH * 2 ))
-IMAGE_HEIGHT=$(( DELTA * ADJUSTED_PAKSIZE / 2 + IMAGE_MARGIN_HEIGHT * 2 ))
+IMAGE_WIDTH=$(( DELTA * ADJUSTED_PAKSIZE / 2 + IMAGE_MARGIN_WIDTH * 2 ))
+IMAGE_HEIGHT=$(( DELTA * ADJUSTED_PAKSIZE / 4 + IMAGE_MARGIN_HEIGHT * 2 ))
 
 CAPTURE_WIDTH=$(( IMAGE_WIDTH + CROP_OFFSET_X * 2 ))
 CAPTURE_HEIGHT=$(( IMAGE_HEIGHT + CROP_OFFSET_Y * 2 ))
