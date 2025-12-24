@@ -1,9 +1,9 @@
 import requests
-from prefect import task
+from create_tiles.custom_task import priority_task
 from create_tiles.config import SERVICE_TILE_COMPRESS_URL, TILE_GROUP_SIZE
 from create_tiles.utils import parse_zxy_str, check_exists
 
-@task(retries=3, retry_delay_seconds=300)
+@priority_task(task_type="tile_compress", retries=3, retry_delay_seconds=300)
 def tile_compress_g(z: int, gx: int, gy: int, tile_results: dict, quality: str):
     print(f"Processing tile compress group at z={z}, ({gx}, {gy}) with {len(tile_results)} tiles")
     

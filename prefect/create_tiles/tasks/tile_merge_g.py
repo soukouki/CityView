@@ -1,9 +1,9 @@
 import requests
-from prefect import task
+from create_tiles.custom_task import priority_task
 from create_tiles.config import SERVICE_TILE_MERGE_URL, TILE_GROUP_SIZE, SAVE_DATA_NAME
 from create_tiles.utils import parse_zxy_str, check_exists
 
-@task(retries=3, retry_delay_seconds=300)
+@priority_task(task_type="tile_merge", retries=3, retry_delay_seconds=300)
 def tile_merge_g(z: int, gx: int, gy: int, child_results: list):
     print(f"Processing tile merge group at z={z}, ({gx}, {gy}) with {len(child_results)} child results")
     for child_result in child_results:

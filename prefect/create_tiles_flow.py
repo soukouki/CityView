@@ -2,6 +2,7 @@ from prefect import flow
 from datetime import timedelta, datetime
 import math
 from collections import defaultdict
+from create_tiles.custom_task_runner import PriorityTaskRunner
 from create_tiles.capture_strategy import CaptureStrategy
 from create_tiles.config import (
     DELTA,
@@ -30,7 +31,19 @@ from create_tiles.tasks.tile_cut_g import tile_cut_g
 from create_tiles.tasks.tile_merge_g import tile_merge_g
 from create_tiles.tasks.tile_compress_g import tile_compress_g
 
-@flow(name='create_tiles')
+@flow(
+    name='create_tiles',
+    task_runner=PriorityTaskRunner(
+        max_workers=14,
+        concurrency_limits={
+            "capture": 9,      # 2 replicas × 4 threads + 1
+            "estimate": 3,     # 2 replicas + 1
+            "tile-cut": 5,     # 4 replicas + 1
+            "tile-merge": 3,   # 2 replicas + 1
+            "tile-compress": 3, # 2 replicas + 1
+        },
+    ),
+)
 def create_tiles():
     strategy = CaptureStrategy(
         map_x=MAP_TILES_X,
@@ -42,6 +55,7 @@ def create_tiles():
     for group in areas_groups:
         for area in group:
             areas_to_group[(area['x'], area['y'])] = group
+    areas_groups_sorted = sorted(areas_groups, key=lambda g: g[0]['priority'], reverse=True)
     print(f"Total capture areas: {len(areas_to_group)}")
 
     # ---------- スクショ撮影タスク ----------
@@ -67,7 +81,7 @@ def create_tiles():
 
     # ---------- スクショ座標推定タスク ----------
     estimate_tasks = {}
-    for group in areas_groups:
+    for group in areas_groups_sorted:
         # capture_gの結果の複数のoutput_pathをestimate_gの外で分解することはできないので、関数に渡してから分解する必要がある
         # なので、具体的なestimate関数の引数の組み立てはestimate_gで行う
         # しかし、すべての情報を与えると依存関係が増えすぎるので、必要なものだけを渡す
@@ -116,7 +130,7 @@ def create_tiles():
     # 各エリアのカバー範囲を事前計算
     print("Calculating area coverage...")
     area_coverage = []
-    for group in areas_groups:
+    for group in areas_groups_sorted:
         for area in group:
             # areaのx, y座標はゲーム内タイル座標
             screen_coord = game_tile_to_screen_lefttop_coord(area['x'], area['y'])

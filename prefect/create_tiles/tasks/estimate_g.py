@@ -1,9 +1,9 @@
 import requests
-from prefect import task
+from create_tiles.custom_task import priority_task
 from create_tiles.config import SERVICE_ESTIMATE_URL
 from create_tiles.utils import game_tile_to_screen_lefttop_coord, parse_xy_str
 
-@task(retries=3, retry_delay_seconds=300)
+@priority_task(task_type="estimate", retries=3, retry_delay_seconds=300)
 def estimate_g(group: list, capture_results: list, estimate_results: list):
     # どんなデータが来るか確認するためのデバッグ出力
     print("Estimating group")

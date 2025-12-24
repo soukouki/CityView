@@ -16,16 +16,16 @@ SIMUTRANS_EXECUTABLE="nanasaba/simutrans-extended"
 PAKSET_NAME="Pak128.Britain-Ex"
 # PAKSET_NAME="pak128"
 PAKSIZE=128
-SAVE_DATA_NAME="demo1"
+SAVE_DATA_NAME="demo2"
 # SAVE_DATA_NAME="yokoze-last"
 
 # マップの大きさについて
 # Pak128.Britain-Exのサンプルマップ
-MAP_TILES_X=512
-MAP_TILES_Y=32
+# MAP_TILES_X=512
+# MAP_TILES_Y=32
 # ななさば1期
-# MAP_TILES_X=4384
-# MAP_TILES_Y=5040
+MAP_TILES_X=4384
+MAP_TILES_Y=5040
 # 横瀬
 # MAP_TILES_X=1920
 # MAP_TILES_Y=1280
@@ -36,7 +36,7 @@ MAP_TILES_Y=32
 # half       : 0.5倍、3段階縮小
 # normal     : 1倍、標準
 # double     : 2倍、3段階拡大、最大ズームイン
-ZOOM_LEVEL=double
+ZOOM_LEVEL=one_eighth
 
 # 地図タイルについて
 TILE_SIZE=512
@@ -52,7 +52,7 @@ TILE_GROUP_SIZE=16
 # スクショ撮影について
 # 推奨値 : quarter=320, half=160, normal=80, double=40
 # メモリが足りない場合は小さくする
-DELTA=40
+DELTA=320
 
 #---------------------------------------
 # ユーザー向け入力欄ここまで

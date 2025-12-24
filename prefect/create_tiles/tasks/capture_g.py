@@ -1,9 +1,9 @@
 import requests
-from prefect import task
+from create_tiles.custom_task import priority_task
 from create_tiles.config import SERVICE_CAPTURE_URL, ZOOM_LEVEL, SAVE_DATA_NAME
 from create_tiles.utils import check_exists
 
-@task(retries=3, retry_delay_seconds=300)
+@priority_task(task_type="capture", retries=3, retry_delay_seconds=300)
 def capture_g(tasks: list):
     # raise NotImplementedError("debugging") # すべてのタスクを失敗させたいときに使う
     print(f"Capturing group with {len(tasks)} tasks")
