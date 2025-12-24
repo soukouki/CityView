@@ -3,8 +3,8 @@ from .config import (
     ADJUSTED_PAKSIZE,
     IMAGE_MARGIN_WIDTH,
     IMAGE_MARGIN_HEIGHT,
-    ENABLE_WIDTH,
-    ENABLE_HEIGHT,
+    IMAGE_EFFECTIVE_WIDTH,
+    IMAGE_EFFECTIVE_HEIGHT,
     MAP_TILES_Y,
     TILE_SIZE,
     MAX_Z,
@@ -13,8 +13,8 @@ from .config import (
 
 # ゲーム内タイル座標系とスクショ座標系の変換式
 def game_tile_to_screen_coord(tile_x: int, tile_y: int) -> tuple[int, int]:
-    screen_x = (ADJUSTED_PAKSIZE // 2) * (tile_x - tile_y) + (ENABLE_WIDTH // 2) + IMAGE_MARGIN_WIDTH
-    screen_y = (ADJUSTED_PAKSIZE // 4) * (tile_x + tile_y) + (ENABLE_HEIGHT // 2) + IMAGE_MARGIN_HEIGHT
+    screen_x = (ADJUSTED_PAKSIZE // 2) * (tile_x - tile_y) + (IMAGE_EFFECTIVE_WIDTH // 2) + IMAGE_MARGIN_WIDTH
+    screen_y = (ADJUSTED_PAKSIZE // 4) * (tile_x + tile_y) + (IMAGE_EFFECTIVE_HEIGHT // 2) + IMAGE_MARGIN_HEIGHT
     return screen_x, screen_y
 
 # ゲーム内タイル座標系とスクショ座標系の変換式で、スクショの糊代部分も含めた左上座標を求める関数

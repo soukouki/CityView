@@ -12,8 +12,6 @@ from create_tiles.config import (
     IMAGE_HEIGHT,
     IMAGE_MARGIN_WIDTH,
     IMAGE_MARGIN_HEIGHT,
-    ENABLE_WIDTH,
-    ENABLE_HEIGHT,
     TILE_GROUP_SIZE,
     MAX_Z,
     TILE_QUALITY_MAX_ZOOM,
