@@ -1,6 +1,6 @@
 import requests
 from create_tiles.priority_task import priority_task
-from create_tiles.config import SERVICE_CREATE_PANEL_URL, FULL_WIDTH, FULL_HEIGHT, MAX_Z
+from create_tiles.config import SERVICE_CREATE_PANEL_URL, FULL_WIDTH, FULL_HEIGHT, MAX_Z, SAVE_DATA_NAME
 from create_tiles.utils import check_exists, parse_zxy_str
 
 @priority_task(task_type="panel", retries=3, retry_delay_seconds=300)
@@ -21,11 +21,7 @@ def create_panel(z: int, resolution: dict, tile_results: list):
                 "x": cx,
                 "y": cy,
             })
-    output_path = "/images/panels/panel_{id}_x{x}_y{y}.png".format(
-        id=resolution['id'],
-        x=resolution['width'],
-        y=resolution['height'],
-    )
+    output_path = f"/images/panels/{SAVE_DATA_NAME}/panel_{resolution['id']}_x{resolution['width']}_y{resolution['height']}.png"
     if check_exists(output_path):
         print(f"  Output already exists at {output_path}, skipping panel creation.")
         return output_path

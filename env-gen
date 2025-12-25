@@ -11,24 +11,31 @@ OUT=".env"
 TZ="Asia/Tokyo"
 
 # マップについて
-SIMUTRANS_EXECUTABLE="nanasaba/simutrans-extended"
+# SIMUTRANS_EXECUTABLE="nanasaba/simutrans-extended"
 # SIMUTRANS_EXECUTABLE="yokoze/sim-linux-OTRPv47_3_3"
-PAKSET_NAME="Pak128.Britain-Ex"
+SIMUTRANS_EXECUTABLE="npns-e1/sim-linux-OTRPv44_5_1"
+# PAKSET_NAME="Pak128.Britain-Ex"
 # PAKSET_NAME="pak128"
-PAKSIZE=128
-SAVE_DATA_NAME="demo1"
+PAKSET_NAME="pak.NPNDv0_06"
+# PAKSIZE=128
+PAKSIZE=64
+# SAVE_DATA_NAME="demo1"
 # SAVE_DATA_NAME="yokoze-last"
+SAVE_DATA_NAME="npns-e1-2029"
 
 # マップの大きさについて
 # Pak128.Britain-Exのサンプルマップ
-MAP_TILES_X=512
-MAP_TILES_Y=32
+# MAP_TILES_X=512
+# MAP_TILES_Y=32
 # ななさば1期
 # MAP_TILES_X=4384
 # MAP_TILES_Y=5040
 # 横瀬
 # MAP_TILES_X=1920
 # MAP_TILES_Y=1280
+# NPNS-E1
+MAP_TILES_X=2529
+MAP_TILES_Y=2484
 
 # 撮影時のズームレベル
 # one_eighth : 0.125倍、6段階縮小、最大ズームアウト
@@ -36,7 +43,7 @@ MAP_TILES_Y=32
 # half       : 0.5倍、3段階縮小
 # normal     : 1倍、標準
 # double     : 2倍、3段階拡大、最大ズームイン
-ZOOM_LEVEL=double
+ZOOM_LEVEL=quarter
 
 # 地図タイルについて
 TILE_SIZE=512
@@ -50,9 +57,9 @@ TILE_QUALITY_OTHER=lossless
 TILE_GROUP_SIZE=32
 
 # スクショ撮影について
-# 推奨値 : quarter=640, half=320, normal=160, double=80
+# 推奨値 : one_eighth=1280, quarter=640, half=320, normal=160, double=80
 # メモリが足りない場合は小さくする
-DELTA=40
+DELTA=640
 
 #---------------------------------------
 # ユーザー向け入力欄ここまで
@@ -93,8 +100,8 @@ IMAGE_EFFECTIVE_WIDTH=$(( DELTA * ADJUSTED_PAKSIZE / 2 ))
 IMAGE_EFFECTIVE_HEIGHT=$(( DELTA * ADJUSTED_PAKSIZE / 4 ))
 
 # タイル数だと縮小時に塗りしろが小さくなり、割合だと拡大時に塗りしろが小さくなってしまった。なので、タイル数と割合の大きい方を採用するようにした
-IMAGE_MARGIN_RATIO_WIDTH=$(( IMAGE_EFFECTIVE_WIDTH / 33 )) # = 3%
-IMAGE_MARGIN_RATIO_HEIGHT=$(( IMAGE_EFFECTIVE_HEIGHT / 33 ))
+IMAGE_MARGIN_RATIO_WIDTH=$(( IMAGE_EFFECTIVE_WIDTH / 20 )) # = 5%
+IMAGE_MARGIN_RATIO_HEIGHT=$(( IMAGE_EFFECTIVE_HEIGHT / 20 ))
 IMAGE_MARGIN_TILE_WIDTH=$(( ADJUSTED_PAKSIZE * 2 )) # 2タイル分
 IMAGE_MARGIN_TILE_HEIGHT=$(( ADJUSTED_PAKSIZE )) # 2タイル分
 if [ $IMAGE_MARGIN_RATIO_WIDTH -gt $IMAGE_MARGIN_TILE_WIDTH ]; then
