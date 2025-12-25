@@ -112,7 +112,8 @@ class CaptureStrategy:
             area_id += 1
             current_x, current_y = new_x, new_y
             flag1.append({'x': current_x, 'y': current_y})
-            if current_y == self.map_y:
+            # 右下辺に到達したら終了
+            if current_x == self.map_x:
                 break
             priority -= 1
             
@@ -126,6 +127,7 @@ class CaptureStrategy:
             })
             area_id += 1
             current_x, current_y = new_x, new_y
+            # 右下辺に到達したら終了
             if current_x == self.map_x:
                 break
             priority -= 1
@@ -223,6 +225,7 @@ class CaptureStrategy:
             area_id += 1
             current_x, current_y = new_x, new_y
             flag1.append({'x': current_x, 'y': current_y})
+            # 左下辺に到達したら終了
             if current_y == self.map_y:
                 break
             privacy -= 1
@@ -237,7 +240,8 @@ class CaptureStrategy:
             })
             area_id += 1
             current_x, current_y = new_x, new_y
-            if current_x == self.map_x:
+            # 左下辺に到達したら終了
+            if current_y == self.map_y:
                 break
             privacy -= 1
             
@@ -309,7 +313,7 @@ class CaptureStrategy:
 
 # テスト
 if __name__ == "__main__":
-    strategy = CaptureStrategy(map_x=4000, map_y=5000, delta=40)
+    strategy = CaptureStrategy(map_x=512, map_y=32, delta=80)
     area_groups = strategy.generate_capture_areas_groups()
     
     for group_idx, group in enumerate(area_groups):

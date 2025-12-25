@@ -11,24 +11,24 @@ OUT=".env"
 TZ="Asia/Tokyo"
 
 # マップについて
-# SIMUTRANS_EXECUTABLE="nanasaba/simutrans-extended"
-SIMUTRANS_EXECUTABLE="yokoze/sim-linux-OTRPv47_3_3"
-# PAKSET_NAME="Pak128.Britain-Ex"
-PAKSET_NAME="pak128"
+SIMUTRANS_EXECUTABLE="nanasaba/simutrans-extended"
+# SIMUTRANS_EXECUTABLE="yokoze/sim-linux-OTRPv47_3_3"
+PAKSET_NAME="Pak128.Britain-Ex"
+# PAKSET_NAME="pak128"
 PAKSIZE=128
-# SAVE_DATA_NAME="demo2"
-SAVE_DATA_NAME="yokoze-last"
+SAVE_DATA_NAME="demo1"
+# SAVE_DATA_NAME="yokoze-last"
 
 # マップの大きさについて
 # Pak128.Britain-Exのサンプルマップ
-# MAP_TILES_X=512
-# MAP_TILES_Y=32
+MAP_TILES_X=512
+MAP_TILES_Y=32
 # ななさば1期
 # MAP_TILES_X=4384
 # MAP_TILES_Y=5040
 # 横瀬
-MAP_TILES_X=1920
-MAP_TILES_Y=1280
+# MAP_TILES_X=1920
+# MAP_TILES_Y=1280
 
 # 撮影時のズームレベル
 # one_eighth : 0.125倍、6段階縮小、最大ズームアウト
@@ -36,7 +36,7 @@ MAP_TILES_Y=1280
 # half       : 0.5倍、3段階縮小
 # normal     : 1倍、標準
 # double     : 2倍、3段階拡大、最大ズームイン
-ZOOM_LEVEL=one_eighth
+ZOOM_LEVEL=double
 
 # 地図タイルについて
 TILE_SIZE=512
@@ -47,12 +47,12 @@ TILE_QUALITY_OTHER=lossless
 # 小さくするとタスクグループが小さくなりタイル処理に関わる並列数が上がるが、タスクオーケストレータが重くなる
 # 巨大なマップ(4000x5000とか)でdoubleズームで撮るなら大きめ(64とか)が良い
 # マップが小さい/ズームレベルが縮小側/並列数を上げたい場合は小さめ(8とか)が良い
-TILE_GROUP_SIZE=16
+TILE_GROUP_SIZE=32
 
 # スクショ撮影について
 # 推奨値 : quarter=640, half=320, normal=160, double=80
 # メモリが足りない場合は小さくする
-DELTA=640
+DELTA=40
 
 #---------------------------------------
 # ユーザー向け入力欄ここまで
@@ -88,15 +88,25 @@ esac
 # マウスカーソル待避のために1タイルの横幅分
 CROP_OFFSET_X=$(( ADJUSTED_PAKSIZE ))
 
-# 塗りしろは2タイル分(1タイルにしたら足りなかった)
-IMAGE_MARGIN_WIDTH=$(( ADJUSTED_PAKSIZE * 2 ))
-
-# 縦なのでPAKSIZEの半分、が2タイル分なのでPAKSIZEと同じ
-IMAGE_MARGIN_HEIGHT=$(( ADJUSTED_PAKSIZE ))
-
 # 実質的なスクショの有効範囲
 IMAGE_EFFECTIVE_WIDTH=$(( DELTA * ADJUSTED_PAKSIZE / 2 ))
 IMAGE_EFFECTIVE_HEIGHT=$(( DELTA * ADJUSTED_PAKSIZE / 4 ))
+
+# タイル数だと縮小時に塗りしろが小さくなり、割合だと拡大時に塗りしろが小さくなってしまった。なので、タイル数と割合の大きい方を採用するようにした
+IMAGE_MARGIN_RATIO_WIDTH=$(( IMAGE_EFFECTIVE_WIDTH / 33 )) # = 3%
+IMAGE_MARGIN_RATIO_HEIGHT=$(( IMAGE_EFFECTIVE_HEIGHT / 33 ))
+IMAGE_MARGIN_TILE_WIDTH=$(( ADJUSTED_PAKSIZE * 2 )) # 2タイル分
+IMAGE_MARGIN_TILE_HEIGHT=$(( ADJUSTED_PAKSIZE )) # 2タイル分
+if [ $IMAGE_MARGIN_RATIO_WIDTH -gt $IMAGE_MARGIN_TILE_WIDTH ]; then
+  IMAGE_MARGIN_WIDTH=$IMAGE_MARGIN_RATIO_WIDTH
+else
+  IMAGE_MARGIN_WIDTH=$IMAGE_MARGIN_TILE_WIDTH
+fi
+if [ $IMAGE_MARGIN_RATIO_HEIGHT -gt $IMAGE_MARGIN_TILE_HEIGHT ]; then
+  IMAGE_MARGIN_HEIGHT=$IMAGE_MARGIN_RATIO_HEIGHT
+else
+  IMAGE_MARGIN_HEIGHT=$IMAGE_MARGIN_TILE_HEIGHT
+fi
 
 # 糊代を含めたスクショ画像サイズ
 IMAGE_WIDTH=$(( IMAGE_EFFECTIVE_WIDTH + IMAGE_MARGIN_WIDTH * 2 ))
