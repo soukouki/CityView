@@ -7,6 +7,7 @@ SERVICE_ESTIMATE_URL = os.environ.get('SERVICE_ESTIMATE_URL', 'http://service-es
 SERVICE_TILE_CUT_URL = os.environ.get('SERVICE_TILE_CUT_URL', 'http://service-tile-cut:5002')
 SERVICE_TILE_MERGE_URL = os.environ.get('SERVICE_TILE_MERGE_URL', 'http://service-tile-merge:5003')
 SERVICE_TILE_COMPRESS_URL = os.environ.get('SERVICE_TILE_COMPRESS_URL', 'http://service-tile-compress:5004')
+SERVICE_CREATE_PANEL_URL = os.environ.get('SERVICE_CREATE_PANEL_URL', 'http://service-create-panel:5005')
 BACKEND_INTERNAL_URL = os.environ.get('BACKEND_INTERNAL_URL', 'http://backend:8002')
 STORAGE_URL = os.environ.get('STORAGE_URL', 'http://storage')
 
@@ -31,6 +32,6 @@ TILE_GROUP_SIZE = int(os.environ.get('TILE_GROUP_SIZE', '64'))
 SAVE_DATA_NAME = os.environ.get('SAVE_DATA_NAME', 'default_save')
 
 # その他
-max_width = (ADJUSTED_PAKSIZE // 2) * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_WIDTH * 4 # 余裕を持ってマージンを倍に見ておく
-max_height = (ADJUSTED_PAKSIZE // 4) * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_HEIGHT * 2
-MAX_Z = math.ceil(math.log2(max(max_width, max_height) / TILE_SIZE)) + 2
+FULL_WIDTH = (ADJUSTED_PAKSIZE // 2) * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_WIDTH * 4 # 余裕を持ってマージンを倍に見ておく
+FULL_HEIGHT = (ADJUSTED_PAKSIZE // 4) * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_HEIGHT * 2
+MAX_Z = math.ceil(math.log2(max(FULL_WIDTH, FULL_HEIGHT) / TILE_SIZE)) + 2

@@ -17,7 +17,15 @@ services:
 
   storage:
     image: nginx:alpine
-    command: ["sh", "-c", "mkdir -p /data/images/screenshots && mkdir -p /data/images/rawtiles && mkdir -p /data/images/tiles && chown -R nginx:nginx /data && nginx -g 'daemon off;'"]
+    command: >
+      sh -c "
+      mkdir -p /data/images/screenshots &&
+      mkdir -p /data/images/rawtiles &&
+      mkdir -p /data/images/tiles &&
+      mkdir -p /data/images/panels &&
+      chown -R nginx:nginx /data &&
+      nginx -g 'daemon off;'
+      "
     volumes:
       - ./volume-storage:/data
       - ./storage/webdav.conf:/etc/nginx/conf.d/default.conf:ro
@@ -85,6 +93,7 @@ services:
       SERVICE_TILE_CUT_URL: http://service-tile-cut:5002
       SERVICE_TILE_MERGE_URL: http://service-tile-merge:5003
       SERVICE_TILE_COMPRESS_URL: http://service-tile-compress:5004
+      SERVICE_CREATE_PANEL_URL: http://service-create-panel:5005
       BACKEND_INTERNAL_URL: http://backend:8002
       STORAGE_URL: http://storage
       TZ: ${TZ:-Asia/Tokyo}
@@ -167,7 +176,6 @@ services:
       GAME_BOOT_CHECK_X: 256 # この座標が黒いかどうかで起動完了を判定する
       GAME_BOOT_CHECK_Y: 256
     volumes:
-      - ./volume-storage:/data
       - ./volume-bin:/app/bin
       - ./volume-save:/root/simutrans/save
     healthcheck:
@@ -187,8 +195,6 @@ services:
       IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
       IMAGE_WIDTH: ${IMAGE_WIDTH}
       IMAGE_HEIGHT: ${IMAGE_HEIGHT}
-    volumes:
-      - ./volume-storage:/data
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:5001/health"]
       interval: 30s
@@ -203,8 +209,6 @@ services:
     environment:
       STORAGE_URL: http://storage
       TILE_SIZE: ${TILE_SIZE}
-    volumes:
-      - ./volume-storage:/data
     deploy:
       replicas: 4
     restart: unless-stopped
@@ -214,8 +218,6 @@ services:
     environment:
       STORAGE_URL: http://storage
       TILE_SIZE: ${TILE_SIZE}
-    volumes:
-      - ./volume-storage:/data
     deploy:
       replicas: 2
     restart: unless-stopped
@@ -224,8 +226,15 @@ services:
     build: ./service-tile-compress
     environment:
       STORAGE_URL: http://storage
-    volumes:
-      - ./volume-storage:/data
     deploy:
       replicas: 2
+    restart: unless-stopped
+
+  service-create-panel:
+    build: ./service-create-panel
+    environment:
+      STORAGE_URL: http://storage
+      TILE_SIZE: ${TILE_SIZE}
+    deploy:
+      replicas: 1
     restart: unless-stopped

@@ -13,9 +13,12 @@ from create_tiles.config import (
     IMAGE_MARGIN_WIDTH,
     IMAGE_MARGIN_HEIGHT,
     TILE_GROUP_SIZE,
-    MAX_Z,
     TILE_QUALITY_MAX_ZOOM,
     TILE_QUALITY_OTHER,
+    TILE_SIZE,
+    MAX_Z,
+    FULL_WIDTH,
+    FULL_HEIGHT,
 )
 from create_tiles.utils import (
     game_tile_to_screen_coord,
@@ -28,17 +31,19 @@ from create_tiles.tasks.estimate_g import estimate_g
 from create_tiles.tasks.tile_cut_g import tile_cut_g
 from create_tiles.tasks.tile_merge_g import tile_merge_g
 from create_tiles.tasks.tile_compress_g import tile_compress_g
+from create_tiles.tasks.create_panel import create_panel
 
 @flow(
     name='create_tiles',
     task_runner=PriorityTaskRunner(
         max_workers=14,
         concurrency_limits={
-            "capture": 9,       # 2 replicas × 4 threads + 1
-            "estimate": 3,      # 2 replicas + 1
-            "tile-cut": 5,      # 4 replicas + 1
-            "tile-merge": 3,    # 2 replicas + 1
-            "tile-compress": 3, # 2 replicas + 1
+            "capture": 9,       # 2 replicas x 4 threads + 1
+            "estimate": 5,      # 2 replicas x 2 workers + 1
+            "tile-cut": 10,     # 4 replicas x 2 workers + 2 (本当は4 threadsあるが一旦保留)
+            "tile-merge": 5,    # 2 replicas x 2 workers + 1 (本当は4 threadsあるが一旦保留)
+            "tile-compress": 5, # 2 replicas x 2 workers + 1 (本当は4 threadsあるが一旦保留)
+            "panel": 3,         # 1 replica  x 2 workers + 1 (本当は4 threadsあるが一旦保留)
         },
     ),
 )
@@ -341,4 +346,48 @@ def create_tiles():
                 quality=TILE_QUALITY_OTHER,
             )
 
-    print(f"Total tile compress tasks: {len(tile_compress_tasks)}")
+    # ---------- 一枚絵生成タスク ----------
+    print("Creating final panel task...")
+    resolutions = [
+        {"width": 1280, "height": 720, "id": "hd"}, # HD
+        {"width": 1920, "height": 1080, "id": "fhd"}, # Full HD
+        {"width": 2560, "height": 1440, "id": "wqhd"}, # WQHD
+        {"width": 3440, "height": 1440, "id": "uwqhd"}, # UWQHD
+        {"width": 3840, "height": 2160, "id": "4k"}, # 4K
+        {"width": 5120, "height": 2880, "id": "5k"}, # 5K
+        {"width": 7680, "height": 4320, "id": "8k"}, # 8K
+        {"width": 15360, "height": 8640, "id": "16k"}, # 16K
+    ]
+    create_panel_tasks = {}
+    for res in resolutions:
+        # 解像度を満たすのに必要なzoomレベルを計算
+        ZOOM_FACTOR = 2.0 # やや大きめのズームレベルのタイルを使うことで、縮小時の画質の劣化を抑える
+        scale_x = res['width'] / TILE_SIZE # 横方向に必要なタイル数
+        scale_y = res['height'] / TILE_SIZE # 縦方向に必要なタイル数
+        scale = max(scale_x, scale_y) * ZOOM_FACTOR
+        z = min(
+            MAX_Z,
+            max(0, int(math.ceil(math.log2(scale))))
+        )
+        print(f"Resolution {res['id']} ({res['width']}x{res['height']}) requires zoom level {z}")
+        # このズームレベルで存在するグループをすべて収集
+        needed_tile_cut_merge_tasks = []
+        for (gx, gy) in existing_groups[z]:
+            tile_cut_task_id = f"tile_cut_g_z{z}_gx{gx}_gy{gy}"
+            tile_merge_task_id = f"tile_merge_g_z{z}_gx{gx}_gy{gy}"
+            if z == MAX_Z and tile_cut_task_id in tile_cut_tasks:
+                needed_tile_cut_merge_tasks.append(tile_cut_tasks[tile_cut_task_id])
+            elif z < MAX_Z and tile_merge_task_id in tile_merge_tasks:
+                needed_tile_cut_merge_tasks.append(tile_merge_tasks[tile_merge_task_id])
+        task_id = f"panel_{res['id']}"
+        create_panel_tasks[task_id] = create_panel.with_options(
+            name=task_id,
+            retries=3,
+            retry_delay_seconds=300,
+        ).submit(
+            z=z,
+            resolution=res,
+            tile_results=needed_tile_cut_merge_tasks,
+        )
+
+    print(f"Total panel tasks: {len(create_panel_tasks)}")
