@@ -40,9 +40,15 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# create libminiupnpc.so.18 symlink for Simutrans
+# Create libminiupnpc.so.18 symlink for Simutrans
 RUN ln -s /usr/lib/x86_64-linux-gnu/libminiupnpc.so.18 /usr/lib/x86_64-linux-gnu/libminiupnpc.so.17 && \
     ldconfig
+
+RUN apt-get update && apt-get install -y --no-install-recommends locales && \
+    sed -i 's/^# *ja_JP.UTF-8 UTF-8/ja_JP.UTF-8 UTF-8/' /etc/locale.gen && \
+    locale-gen
+ENV LANG=ja_JP.UTF-8 \
+    LC_ALL=ja_JP.UTF-8
 
 # Bundler
 RUN gem install bundler -N
