@@ -1,3 +1,4 @@
+# service-create-panel/app.py
 from flask import Flask, request, jsonify
 from PIL import Image
 import requests
@@ -119,9 +120,23 @@ def create_panel():
             # タイルをダウンロード
             img = download_tile(tile_path)
             
+            # RGBに変換（アルファチャンネルがある場合は背景色で合成）
+            if img.mode == 'RGBA':
+                # 灰色の背景を作成
+                background = Image.new('RGB', img.size, (64, 64, 64))
+                # アルファチャンネルを使って合成
+                background.paste(img, mask=img.split()[3])  # 3番目のチャンネルがアルファ
+                img.close()
+                img = background
+            elif img.mode != 'RGB':
+                # その他のモードもRGBに変換
+                converted = img.convert('RGB')
+                img.close()
+                img = converted
+            
             # キャンバス上の貼り付け位置（ピクセル座標）を計算
-            paste_x = tile_x * TILE_SIZE
-            paste_y = tile_y * TILE_SIZE
+            paste_x = tile_x * TILE_SIZE - int(map_width * 0.1)  # なぜか右にずれるので調整
+            paste_y = tile_y * TILE_SIZE - int(map_height * 0.03) # なぜか下にずれるので調整
             
             # キャンバスに貼り付け
             canvas.paste(img, (paste_x, paste_y))
@@ -136,7 +151,7 @@ def create_panel():
         map_image = canvas.crop((0, 0, map_width, map_height))
         canvas.close()  # 元のキャンバスは不要
         
-        logger.info(f"マップ領域クリッピング完了: {map_width}x{map_height}px")
+        logger.info(f"マップ領域調整完了: {map_width}x{map_height}px")
         
         # ステップ5: アスペクト比を維持したリサイズ
         aspect_ratio = map_width / map_height
