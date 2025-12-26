@@ -34,4 +34,4 @@ SAVE_DATA_NAME = os.environ.get('SAVE_DATA_NAME', 'default_save')
 # その他
 FULL_WIDTH = (ADJUSTED_PAKSIZE // 2) * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_WIDTH * 4 # 余裕を持ってマージンを倍に見ておく
 FULL_HEIGHT = (ADJUSTED_PAKSIZE // 4) * (MAP_TILES_X + MAP_TILES_Y) + IMAGE_MARGIN_HEIGHT * 2
-MAX_Z = math.ceil(math.log2(max(FULL_WIDTH, FULL_HEIGHT) / TILE_SIZE)) + 2
+MAX_Z = math.ceil(math.log2(max(FULL_WIDTH, FULL_HEIGHT) // TILE_SIZE))
