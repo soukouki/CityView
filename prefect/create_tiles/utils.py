@@ -1,15 +1,20 @@
 import requests
-from .config import (
-    ADJUSTED_PAKSIZE,
-    IMAGE_MARGIN_WIDTH,
-    IMAGE_MARGIN_HEIGHT,
-    IMAGE_EFFECTIVE_WIDTH,
-    IMAGE_EFFECTIVE_HEIGHT,
-    MAP_TILES_Y,
-    TILE_SIZE,
-    MAX_Z,
-    STORAGE_URL,
-)
+if __name__ == "__main__": # テスト用
+    import sys
+    sys.dont_write_bytecode = True
+    from config import *
+else:
+    from .config import (
+        ADJUSTED_PAKSIZE,
+        IMAGE_MARGIN_WIDTH,
+        IMAGE_MARGIN_HEIGHT,
+        IMAGE_EFFECTIVE_WIDTH,
+        IMAGE_EFFECTIVE_HEIGHT,
+        MAP_TILES_Y,
+        TILE_SIZE,
+        MAX_Z,
+        STORAGE_URL,
+    )
 
 # ゲーム内タイル座標系とスクショ座標系の変換式
 def game_tile_to_screen_coord(tile_x: int, tile_y: int) -> tuple[int, int]:
@@ -25,8 +30,8 @@ def game_tile_to_screen_lefttop_coord(tile_x: int, tile_y: int) -> tuple[int, in
 
 # スクショ座標系からゲーム内タイル座標系への変換式
 def screen_coord_to_game_tile(screen_x: int, screen_y: int) -> tuple[int, int]:
-    X = screen_x - IMAGE_MARGIN_WIDTH
-    Y = screen_y - IMAGE_MARGIN_HEIGHT
+    X = screen_x - IMAGE_MARGIN_WIDTH - (IMAGE_EFFECTIVE_WIDTH // 2)
+    Y = screen_y - IMAGE_MARGIN_HEIGHT - (IMAGE_EFFECTIVE_HEIGHT // 2)
     tile_x = (X + 2 * Y) // ADJUSTED_PAKSIZE
     tile_y = (2 * Y - X) // ADJUSTED_PAKSIZE
     return tile_x, tile_y
@@ -34,7 +39,7 @@ def screen_coord_to_game_tile(screen_x: int, screen_y: int) -> tuple[int, int]:
 # スクショ座標系と地図タイル座標系の変換式
 def screen_coord_to_map_tile(screen_x: int, screen_y: int, z: int) -> tuple[int, int]:
     scale = 2 ** (MAX_Z - z)
-    tile_x = (screen_x + ADJUSTED_PAKSIZE * MAP_TILES_Y + IMAGE_MARGIN_WIDTH * 2) // (TILE_SIZE * scale)
+    tile_x = (screen_x + ADJUSTED_PAKSIZE * MAP_TILES_Y // 2 + IMAGE_MARGIN_WIDTH * 2) // (TILE_SIZE * scale)
     tile_y = screen_y // (TILE_SIZE * scale)
     return tile_x, tile_y
 
@@ -42,7 +47,7 @@ def screen_coord_to_map_tile(screen_x: int, screen_y: int, z: int) -> tuple[int,
 # 左上隅の座標を返す
 def map_tile_to_screen_coord(tile_x: int, tile_y: int, z: int) -> tuple[int, int]:
     scale = 2 ** (MAX_Z - z)
-    screen_x_min = tile_x * TILE_SIZE * scale - ADJUSTED_PAKSIZE * MAP_TILES_Y - IMAGE_MARGIN_WIDTH * 2
+    screen_x_min = tile_x * TILE_SIZE * scale - ADJUSTED_PAKSIZE * MAP_TILES_Y // 2 - IMAGE_MARGIN_WIDTH * 2
     screen_y_min = tile_y * TILE_SIZE * scale
     return screen_x_min, screen_y_min
 
@@ -66,3 +71,42 @@ def check_exists(output_path: str) -> bool:
     url = f"{STORAGE_URL}{output_path}"
     response = requests.head(url)
     return response.status_code == 200
+
+if __name__ == "__main__":
+    print("原点")
+    sx1, sy1 = game_tile_to_screen_coord(0, 0)
+    print(f"ゲーム内タイル座標 (0,0) -> スクショ座標 ({sx1},{sy1})")
+    sx2, sy2 = game_tile_to_screen_lefttop_coord(0, 0)
+    print(f"ゲーム内タイル座標 (0,0) -> スクショ左上座標 ({sx2},{sy2})")
+    assert 0 == sx2, f"Expected: 0, Actual: {sx2}"
+    assert 0 == sy2, f"Expected: 0, Actual: {sy2}"
+    gx1, gy1 = screen_coord_to_game_tile(sx1, sy1)
+    print(f"スクショ座標 ({sx1},{sy1}) -> ゲーム内タイル座標 ({gx1},{gy1})")
+    assert 0 == gx1, f"Expected: 0, Actual: {gx1}"
+    assert 0 == gy1, f"Expected: 0, Actual: {gy1}"
+    mx1, my1 = screen_coord_to_map_tile(sx1, sy1, 10)
+    print(f"スクショ座標 ({sx1},{sy1}) -> 地図タイル座標 (10,{mx1},{my1})")
+    sx3, sy3 = map_tile_to_screen_coord(mx1, my1, 10)
+    print(f"地図タイル座標 (10,{mx1},{my1}) -> スクショ座標 ({sx3},{sy3})")
+    gx2, gy2 = screen_coord_to_game_tile(sx3, sy3)
+    print(f"スクショ座標 ({sx3},{sy3}) -> ゲーム内タイル座標 ({gx2},{gy2})") # 十分に(0,0)付近であればOK
+
+    print("\n左端")
+    sx4, sy4 = game_tile_to_screen_lefttop_coord(0, MAP_TILES_Y)
+    print(f"ゲーム内タイル座標 (0,{MAP_TILES_Y}) -> スクショ左上座標 ({sx4},{sy4})")
+    mx2, my2 = screen_coord_to_map_tile(sx4, sy4, 10)
+    print(f"スクショ座標 ({sx4},{sy4}) -> 地図タイル座標 (10,{mx2},{my2})") # xは0付近になればOK
+    sx5, sy5 = map_tile_to_screen_coord(mx2, my2, 10)
+    print(f"地図タイル座標 (10,{mx2},{my2}) -> スクショ座標 ({sx5},{sy5})")
+    gx3, gy3 = screen_coord_to_game_tile(sx5, sy5)
+    print(f"スクショ座標 ({sx5},{sy5}) -> ゲーム内タイル座標 ({gx3},{gy3})") # 十分に(0,MAP_TILES_Y)付近であればOK
+
+    print("\n右端")
+    sx6, sy6 = game_tile_to_screen_lefttop_coord(MAP_TILES_X, 0)
+    print(f"ゲーム内タイル座標 ({MAP_TILES_X},0) -> スクショ左上座標 ({sx6},{sy6})")
+    mx3, my3 = screen_coord_to_map_tile(sx6, sy6, 10)
+    print(f"スクショ座標 ({sx6},{sy6}) -> 地図タイル座標 (10,{mx3},{my3})")
+    sx7, sy7 = map_tile_to_screen_coord(mx3, my3, 10)
+    print(f"地図タイル座標 (10,{mx3},{my3}) -> スクショ座標 ({sx7},{sy7})")
+    gx4, gy4 = screen_coord_to_game_tile(sx7, sy7)
+    print(f"スクショ座標 ({sx7},{sy7}) -> ゲーム内タイル座標 ({gx4},{gy4})") # 十分に(MAP_TILES_X,0)付近であればOK

@@ -365,9 +365,10 @@ def create_tiles():
         scale_x = res['width'] / TILE_SIZE # 横方向に必要なタイル数
         scale_y = res['height'] / TILE_SIZE # 縦方向に必要なタイル数
         scale = max(scale_x, scale_y) * ZOOM_FACTOR
+        z_plus = math.log2(scale) # scaleで倍率が上がるので、その分を補正
         z = min(
             MAX_Z,
-            max(0, int(math.ceil(math.log2(scale))))
+            max(0, int(math.ceil(math.log2(scale) + z_plus)))
         )
         print(f"Resolution {res['id']} ({res['width']}x{res['height']}) requires zoom level {z}")
         # このズームレベルで存在するグループをすべて収集

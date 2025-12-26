@@ -425,6 +425,10 @@
       "width": number,      // 今回のzoomレベルでのマップ幅（px）
       "height": number      // 今回のzoomレベルでのマップ高さ（px）
     },
+    "offsets": {
+      "x": number,          // マップ左上のタイルX座標に対するピクセルオフセット
+      "y": number           // マップ左上のタイルY座標に対するピクセルオフセット
+    },
     "resolution": {
       "width": number,      // 出力画像幅（px）
       "height": number      // 出力画像高さ（px）

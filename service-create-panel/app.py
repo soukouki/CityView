@@ -59,6 +59,7 @@ def create_panel():
         "z": int,
         "tiles": [{"path": str, "x": int, "y": int}],
         "map_size": {"width": int, "height": int},
+        "offsets": {"x": int, "y": int},
         "resolution": {"width": int, "height": int},
         "output_path": str
     }
@@ -73,6 +74,7 @@ def create_panel():
         z = data.get('z')
         tiles = data.get('tiles')
         map_size = data.get('map_size')
+        offsets = data.get('offsets')
         resolution = data.get('resolution')
         output_path = data.get('output_path')
         
@@ -86,6 +88,9 @@ def create_panel():
         if not map_size or 'width' not in map_size or 'height' not in map_size:
             logger.error("map_size parameter is missing or incomplete")
             return jsonify({"error": "map_size with width and height is required"}), 400
+        if not offsets or 'x' not in offsets or 'y' not in offsets:
+            logger.error("offsets parameter is missing or incomplete")
+            return jsonify({"error": "offsets with x and y is required"}), 400
         if not resolution or 'width' not in resolution or 'height' not in resolution:
             logger.error("resolution parameter is missing or incomplete")
             return jsonify({"error": "resolution with width and height is required"}), 400
@@ -98,6 +103,8 @@ def create_panel():
         map_height = map_size['height']  # ピクセル
         target_width = resolution['width']  # ピクセル
         target_height = resolution['height']  # ピクセル
+        offset_x = offsets['x']  # ピクセル
+        offset_y = offsets['y']  # ピクセル
         
         if map_width <= 0 or map_height <= 0:
             logger.error("map_size dimensions must be positive")
@@ -105,8 +112,11 @@ def create_panel():
         if target_width <= 0 or target_height <= 0:
             logger.error("resolution dimensions must be positive")
             return jsonify({"error": "resolution dimensions must be positive"}), 400
+        if offset_x < 0 or offset_y < 0:
+            logger.error("offsets must be non-negative")
+            return jsonify({"error": "offsets must be non-negative"}), 400
         
-        logger.info(f"一枚絵生成開始: z={z}, タイル数={len(tiles)}, マップサイズ={map_width}x{map_height}px, 解像度={target_width}x{target_height}px")
+        logger.info(f"一枚絵生成開始: z={z}, タイル数={len(tiles)}, マップサイズ={map_width}x{map_height}px, 解像度={target_width}x{target_height}px, オフセット=({offset_x},{offset_y})px, 出力先={output_path}")
         
         # ステップ3: キャンバス作成とタイル配置
         canvas = Image.new('RGB', (map_width, map_height), color=(64, 64, 64))
@@ -135,8 +145,8 @@ def create_panel():
                 img = converted
             
             # キャンバス上の貼り付け位置（ピクセル座標）を計算
-            paste_x = tile_x * TILE_SIZE - int(map_width * 0.1)  # なぜか右にずれるので調整
-            paste_y = tile_y * TILE_SIZE - int(map_height * 0.03) # なぜか下にずれるので調整
+            paste_x = tile_x * TILE_SIZE - offset_x
+            paste_y = tile_y * TILE_SIZE - offset_y
             
             # キャンバスに貼り付け
             canvas.paste(img, (paste_x, paste_y))

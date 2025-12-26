@@ -54,12 +54,18 @@ TILE_QUALITY_OTHER=lossless
 # 小さくするとタスクグループが小さくなりタイル処理に関わる並列数が上がるが、タスクオーケストレータが重くなる
 # 巨大なマップ(4000x5000とか)でdoubleズームで撮るなら大きめ(64とか)が良い
 # マップが小さい/ズームレベルが縮小側/並列数を上げたい場合は小さめ(8とか)が良い
-TILE_GROUP_SIZE=32
+TILE_GROUP_SIZE=16
 
 # スクショ撮影について
 # 推奨値 : one_eighth=1280, quarter=640, half=320, normal=160, double=80
 # メモリが足りない場合は小さくする
 DELTA=640
+
+# スクショの糊代の大きさ(%)
+# 5にすると、上下左右それぞれ画像サイズの5%分が糊代になる
+# 基本は3%や5%で十分だが、山がちで地形が激しい場合は10%くらいにしても良い
+# ズームして撮影する場合は2タイル分と比べて大きい方を採用する
+IMAGE_MERGIN_RATIO_PERCENT=10
 
 #---------------------------------------
 # ユーザー向け入力欄ここまで
@@ -100,8 +106,8 @@ IMAGE_EFFECTIVE_WIDTH=$(( DELTA * ADJUSTED_PAKSIZE / 2 ))
 IMAGE_EFFECTIVE_HEIGHT=$(( DELTA * ADJUSTED_PAKSIZE / 4 ))
 
 # タイル数だと縮小時に塗りしろが小さくなり、割合だと拡大時に塗りしろが小さくなってしまった。なので、タイル数と割合の大きい方を採用するようにした
-IMAGE_MARGIN_RATIO_WIDTH=$(( IMAGE_EFFECTIVE_WIDTH / 20 )) # = 5%
-IMAGE_MARGIN_RATIO_HEIGHT=$(( IMAGE_EFFECTIVE_HEIGHT / 20 ))
+IMAGE_MARGIN_RATIO_WIDTH=$(( IMAGE_EFFECTIVE_WIDTH * IMAGE_MERGIN_RATIO_PERCENT / 100 ))
+IMAGE_MARGIN_RATIO_HEIGHT=$(( IMAGE_EFFECTIVE_HEIGHT * IMAGE_MERGIN_RATIO_PERCENT / 100 ))
 IMAGE_MARGIN_TILE_WIDTH=$(( ADJUSTED_PAKSIZE * 2 )) # 2タイル分
 IMAGE_MARGIN_TILE_HEIGHT=$(( ADJUSTED_PAKSIZE )) # 2タイル分
 if [ $IMAGE_MARGIN_RATIO_WIDTH -gt $IMAGE_MARGIN_TILE_WIDTH ]; then

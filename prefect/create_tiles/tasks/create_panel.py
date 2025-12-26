@@ -1,6 +1,6 @@
 import requests
 from create_tiles.priority_task import priority_task
-from create_tiles.config import SERVICE_CREATE_PANEL_URL, FULL_WIDTH, FULL_HEIGHT, MAX_Z, SAVE_DATA_NAME
+from create_tiles.config import SERVICE_CREATE_PANEL_URL, FULL_WIDTH, FULL_HEIGHT, MAX_Z, SAVE_DATA_NAME, IMAGE_MARGIN_WIDTH, IMAGE_MARGIN_HEIGHT
 from create_tiles.utils import check_exists, parse_zxy_str
 
 @priority_task(task_type="panel", retries=3, retry_delay_seconds=300)
@@ -28,10 +28,19 @@ def create_panel(z: int, resolution: dict, tile_results: list):
     
     url = f"{SERVICE_CREATE_PANEL_URL}/create_panel"
     map_scale = 2 ** (MAX_Z - z)
+    map_size = {
+        "width": (FULL_WIDTH + 2 * IMAGE_MARGIN_WIDTH) // map_scale,
+        "height": (FULL_HEIGHT + 2 * IMAGE_MARGIN_HEIGHT) // map_scale,
+    }
+    offsets = {
+        "x": IMAGE_MARGIN_WIDTH * 4 // map_scale,
+        "y": IMAGE_MARGIN_HEIGHT * 4 // map_scale,
+    }
     payload = {
         "z": z,
         "tiles": tiles,
-        "map_size": {"width": FULL_WIDTH // map_scale, "height": FULL_HEIGHT // map_scale},
+        "map_size": map_size,
+        "offsets": offsets,
         "resolution": {"width": resolution['width'], "height": resolution['height']},
         "output_path": output_path,
     }
