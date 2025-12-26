@@ -1,3 +1,4 @@
+import sys
 import requests
 if __name__ == "__main__": # テスト用
     import sys
@@ -71,6 +72,9 @@ def check_exists(output_path: str) -> bool:
     url = f"{STORAGE_URL}{output_path}"
     response = requests.head(url)
     return response.status_code == 200
+
+def log(*args):
+    print(*args, file=sys.stdout, flush=True)
 
 if __name__ == "__main__":
     print("原点")

@@ -1,16 +1,16 @@
 import requests
 from create_tiles.priority_task import priority_task
 from create_tiles.config import SERVICE_CREATE_PANEL_URL, FULL_WIDTH, FULL_HEIGHT, MAX_Z, SAVE_DATA_NAME, IMAGE_MARGIN_WIDTH, IMAGE_MARGIN_HEIGHT
-from create_tiles.utils import check_exists, parse_zxy_str
+from create_tiles.utils import check_exists, parse_zxy_str, log
 
 @priority_task(task_type="panel", retries=3, retry_delay_seconds=300)
 def create_panel(z: int, resolution: dict, tile_results: list):
-    print(f"Creating panel at zoom level {z} with resolution {resolution}")
-    print(f"Received {len(tile_results)} tile groups")
+    log(f"Creating panel at zoom level {z} with resolution {resolution}")
+    log(f"Received {len(tile_results)} tile groups")
     for tile_result in tile_results:
-        print(" Tile result:")
+        log(" Tile result:")
         for key, path in tile_result.items():
-            print(f"  - key:{key}, path: {path}")
+            log(f"  - key:{key}, path: {path}")
     # tile_cut_gとtile_merge_gの両方の結果を受け取ることがある
     tiles = [] # {"path": str, "x": int, "y": int}
     for tile_result in tile_results:
@@ -23,7 +23,7 @@ def create_panel(z: int, resolution: dict, tile_results: list):
             })
     output_path = f"/images/panels/{SAVE_DATA_NAME}/panel_{resolution['id']}_x{resolution['width']}_y{resolution['height']}.png"
     if check_exists(output_path):
-        print(f"  Output already exists at {output_path}, skipping panel creation.")
+        log(f"  Output already exists at {output_path}, skipping panel creation.")
         return output_path
     
     url = f"{SERVICE_CREATE_PANEL_URL}/create_panel"
@@ -45,10 +45,10 @@ def create_panel(z: int, resolution: dict, tile_results: list):
         "output_path": output_path,
     }
     response = requests.post(url, json=payload)
-    print(f"status code: {response.status_code}")
-    print(f"response text: {response.text}")
-    print("payload:", payload)
+    log(f"status code: {response.status_code}")
+    log(f"response text: {response.text}")
+    log("payload:", payload)
     response.raise_for_status()
-    print(f"Panel created successfully: {output_path}")
+    log(f"Panel created successfully: {output_path}")
     return output_path
 

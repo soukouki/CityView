@@ -356,15 +356,13 @@ def create_tiles():
         {"width": 3840, "height": 2160, "id": "4k"}, # 4K
         {"width": 5120, "height": 2880, "id": "5k"}, # 5K
         {"width": 7680, "height": 4320, "id": "8k"}, # 8K
-        {"width": 15360, "height": 8640, "id": "16k"}, # 16K
     ]
     create_panel_tasks = {}
     for res in resolutions:
         # 解像度を満たすのに必要なzoomレベルを計算
-        ZOOM_FACTOR = 2.0 # やや大きめのズームレベルのタイルを使うことで、縮小時の画質の劣化を抑える
         scale_x = res['width'] / TILE_SIZE # 横方向に必要なタイル数
         scale_y = res['height'] / TILE_SIZE # 縦方向に必要なタイル数
-        scale = max(scale_x, scale_y) * ZOOM_FACTOR
+        scale = max(scale_x, scale_y)
         z_plus = math.log2(scale) # scaleで倍率が上がるので、その分を補正
         z = min(
             MAX_Z,

@@ -54,8 +54,7 @@ module ServiceCapture
 
     GAME_MANAGER = ServiceCapture::GameProcessManager.new(
       executable: ENV.fetch("SIMUTRANS_EXECUTABLE", "simutrans-extended"),
-      # Host expects binaries mounted at /app/bin by compose
-      executable_dir: ENV.fetch("SIMUTRANS_EXECUTABLE_DIR", "/app/bin"),
+      executable_dir: "/app/bin",
       pakset_name: ENV.fetch("PAKSET_NAME"),
       display: ENV.fetch("DISPLAY", ":99"),
       screen_width: ENV.fetch("CAPTURE_SCREEN_WIDTH").to_i,
@@ -112,7 +111,8 @@ module ServiceCapture
       if save_data_name.empty?
         halt 400, json(error: "invalid_save_data_name", message: "save_data_name cannot be empty")
       end
-      if File.exist?(File.join("/root/simutrans/save", save_data_name) + ".sve") == false
+      save_dir = File.join("/app/bin", File.dirname(ENV.fetch("SIMUTRANS_EXECUTABLE")), "save")
+      if File.exist?(File.join(save_dir, "#{save_data_name}.sve")) == false
         halt 400, json(error: "save_data_not_found", message: "save data not found")
       end
       x = Integer(payload["x"])

@@ -11,25 +11,25 @@ from create_tiles.config import (
     IMAGE_MARGIN_HEIGHT,
     SAVE_DATA_NAME,
 )
-from create_tiles.utils import map_tile_to_screen_coord, parse_xy_str, check_exists
+from create_tiles.utils import map_tile_to_screen_coord, parse_xy_str, check_exists, log
 
 @priority_task(task_type="tile_cut", retries=3, retry_delay_seconds=300)
 def tile_cut_g(gx: int, gy: int, related_areas: list, capture_results: list, estimate_results: list):
-    print(f"Processing tile cut group at ({gx}, {gy}) with {len(related_areas)} related areas")
+    log(f"Processing tile cut group at ({gx}, {gy}) with {len(related_areas)} related areas")
     for area in related_areas:
-        print(f"  Related area: x{area['x']}, y{area['y']}")
-    print(f"Received {len(capture_results)} capture results groups")
+        log(f"  Related area: x{area['x']}, y{area['y']}")
+    log(f"Received {len(capture_results)} capture results groups")
     for capture_result in capture_results:
-        print(" Capture result:")
+        log(" Capture result:")
         for xy_str, image_path in capture_result.items():
             x, y = parse_xy_str(xy_str)
-            print(f"  Capture result - coords: ({x}, {y}), image_path: {image_path}")
-    print(f"Received {len(estimate_results)} estimate results groups")
+            log(f"  Capture result - coords: ({x}, {y}), image_path: {image_path}")
+    log(f"Received {len(estimate_results)} estimate results groups")
     for estimate_result in estimate_results:
-        print(" Estimate result:")
+        log(" Estimate result:")
         for xy_str, coords in estimate_result.items():
             x, y = parse_xy_str(xy_str)
-            print(f"  Estimate result - coords: ({x}, {y}), estimated coords: ({coords['x']}, {coords['y']})")
+            log(f"  Estimate result - coords: ({x}, {y}), estimated coords: ({coords['x']}, {coords['y']})")
 
     # capture_resultsとestimate_resultsを辞書に変換しておく
     capture_dict = {}
@@ -95,7 +95,7 @@ def tile_cut_g(gx: int, gy: int, related_areas: list, capture_results: list, est
             
             output_path = f"/images/rawtiles/{SAVE_DATA_NAME}/{MAX_Z}/{tx}/{ty}.png"
             if check_exists(output_path):
-                print(f"  Output already exists at {output_path}, skipping tile cut.")
+                log(f"  Output already exists at {output_path}, skipping tile cut.")
                 cut_tiles[f"z{MAX_Z}_x{tx}_y{ty}"] = output_path
                 continue
             tile_cut(
@@ -126,11 +126,11 @@ def tile_cut(x: int, y: int, images: list, output_path: str):
         "output_path": output_path,
     }
     response = requests.post(url, json=payload)
-    print(f"status code: {response.status_code}")
-    print(f"response text: {response.text}")
-    print("payload:", payload)
+    log(f"status code: {response.status_code}")
+    log(f"response text: {response.text}")
+    log("payload:", payload)
     response.raise_for_status()
     data = response.json()
     saved_path = data["output_path"]
-    print(f"Cut tile saved at: {saved_path}")
+    log(f"Cut tile saved at: {saved_path}")
     return saved_path

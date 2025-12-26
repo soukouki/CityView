@@ -1,29 +1,29 @@
 import requests
 from create_tiles.priority_task import priority_task
 from create_tiles.config import SERVICE_ESTIMATE_URL
-from create_tiles.utils import game_tile_to_screen_lefttop_coord, parse_xy_str
+from create_tiles.utils import game_tile_to_screen_lefttop_coord, parse_xy_str, log
 
 @priority_task(task_type="estimate", retries=3, retry_delay_seconds=300)
 def estimate_g(group: list, capture_results: list, estimate_results: list):
     # どんなデータが来るか確認するためのデバッグ出力
-    print("Estimating group")
-    print(f"Group has {len(group)} areas")
+    log("Estimating group")
+    log(f"Group has {len(group)} areas")
     for area in group:
-        print(f"  x:{area['x']}, y:{area['y']}, priority:{area['priority']}")
+        log(f"  x:{area['x']}, y:{area['y']}, priority:{area['priority']}")
         for comp in area['compare']:
-            print(f"    compare x:{comp['x']}, y:{comp['y']}")
-    print(f"Received {len(capture_results)} capture results groups")
+            log(f"    compare x:{comp['x']}, y:{comp['y']}")
+    log(f"Received {len(capture_results)} capture results groups")
     for capture_result in capture_results:
-        print(" Capture result:")
+        log(" Capture result:")
         for xy_str, image_path in capture_result.items():
             x, y = parse_xy_str(xy_str)
-            print(f"  coords: ({x}, {y}), image_path: {image_path}")
-    print(f"Received {len(estimate_results)} estimate results groups")
+            log(f"  coords: ({x}, {y}), image_path: {image_path}")
+    log(f"Received {len(estimate_results)} estimate results groups")
     for estimate_result in estimate_results:
-        print(" Estimate result:")
+        log(" Estimate result:")
         for xy_str, coords in estimate_result.items():
             x, y = parse_xy_str(xy_str)
-            print(f"  coords: ({x}, {y}), estimated coords: ({coords['x']}, {coords['y']})")
+            log(f"  coords: ({x}, {y}), estimated coords: ({coords['x']}, {coords['y']})")
 
     # capture_resultsとestimate_resultsを辞書に変換しておく
     capture_dict = {}
@@ -39,7 +39,7 @@ def estimate_g(group: list, capture_results: list, estimate_results: list):
 
     estimated_results = {} # こちらのkeyは "x{X}_y{Y}" の形式にする(XComのため)
     for area in group:
-        print(f"Estimating coords for x:{area['x']}, y:{area['y']}")
+        log(f"Estimating coords for x:{area['x']}, y:{area['y']}")
         image_path = capture_dict[(area['x'], area['y'])]
         hint_coord = game_tile_to_screen_lefttop_coord(area['x'], area['y'])
         adjustment_images = []
@@ -50,7 +50,7 @@ def estimate_g(group: list, capture_results: list, estimate_results: list):
                 "image_path": adj_image_path,
                 "coords": adj_coords,
             })
-            print(f"  Using adjacent image {adj_image_path} at offset ({adj_coords['x']}, {adj_coords['y']})")
+            log(f"  Using adjacent image {adj_image_path} at offset ({adj_coords['x']}, {adj_coords['y']})")
         estimated_coords = estimate(
             image_path=image_path,
             adjacent_images=adjustment_images,
@@ -79,12 +79,12 @@ def estimate(image_path: str, adjacent_images: list, hint_x: int, hint_y: int):
         "hint_y": hint_y
     }
     response = requests.post(url, json=payload)
-    print(f"status code: {response.status_code}")
-    print(f"response text: {response.text}")
-    print("payload:", payload)
+    log(f"status code: {response.status_code}")
+    log(f"response text: {response.text}")
+    log("payload:", payload)
     response.raise_for_status()
     data = response.json()
     estimated_x = data["estimated_x"]
     estimated_y = data["estimated_y"]
-    print(f"Estimated coords: ({estimated_x}, {estimated_y})")
+    log(f"Estimated coords: ({estimated_x}, {estimated_y})")
     return {"x": estimated_x, "y": estimated_y}

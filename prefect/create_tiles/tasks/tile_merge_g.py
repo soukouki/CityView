@@ -1,16 +1,16 @@
 import requests
 from create_tiles.priority_task import priority_task
 from create_tiles.config import SERVICE_TILE_MERGE_URL, TILE_GROUP_SIZE, SAVE_DATA_NAME
-from create_tiles.utils import parse_zxy_str, check_exists
+from create_tiles.utils import parse_zxy_str, check_exists, log
 
 @priority_task(task_type="tile_merge", retries=3, retry_delay_seconds=300)
 def tile_merge_g(z: int, gx: int, gy: int, child_results: list):
-    print(f"Processing tile merge group at z={z}, ({gx}, {gy}) with {len(child_results)} child results")
+    log(f"Processing tile merge group at z={z}, ({gx}, {gy}) with {len(child_results)} child results")
     for child_result in child_results:
-        print(" Child result:")
+        log(" Child result:")
         for key, path in child_result.items():
             cz, cx, cy = parse_zxy_str(key)
-            print(f"  Child tile - z:{cz}, x:{cx}, y:{cy}, path: {path}")
+            log(f"  Child tile - z:{cz}, x:{cx}, y:{cy}, path: {path}")
     
     # child_resultsは辞書のリスト。1つの辞書にマージ
     child_tiles = {}
@@ -42,13 +42,13 @@ def tile_merge_g(z: int, gx: int, gy: int, child_results: list):
             if tiles_to_merge:
                 output_path = f"/images/rawtiles/{SAVE_DATA_NAME}/{z}/{tx}/{ty}.png"
                 if check_exists(output_path):
-                    print(f"  Output already exists at {output_path}, skipping merge.")
+                    log(f"  Output already exists at {output_path}, skipping merge.")
                     merged_tiles[f"z{z}_x{tx}_y{ty}"] = output_path
                     continue
                 tile_merge(tiles_to_merge, output_path)
                 merged_tiles[f"z{z}_x{tx}_y{ty}"] = output_path
 
-    print(f"Total merged tiles: {len(merged_tiles)}")
+    log(f"Total merged tiles: {len(merged_tiles)}")
     return merged_tiles
 
 def tile_merge(tiles: list, output_path: str):
@@ -63,11 +63,11 @@ def tile_merge(tiles: list, output_path: str):
         "output_path": output_path
     }
     response = requests.post(url, json=payload)
-    print(f"status code: {response.status_code}")
-    print(f"response text: {response.text}")
-    print("payload:", payload)
+    log(f"status code: {response.status_code}")
+    log(f"response text: {response.text}")
+    log("payload:", payload)
     response.raise_for_status()
     data = response.json()
     saved_path = data["output_path"]
-    print(f"Merged tile saved at: {saved_path}")
+    log(f"Merged tile saved at: {saved_path}")
     return saved_path
