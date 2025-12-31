@@ -1,7 +1,23 @@
 import requests
 from create_tiles.priority_task import priority_task
-from create_tiles.config import SERVICE_CREATE_PANEL_URL, FULL_WIDTH, FULL_HEIGHT, MAX_Z, SAVE_DATA_NAME, IMAGE_MARGIN_WIDTH, IMAGE_MARGIN_HEIGHT
-from create_tiles.utils import check_exists, parse_zxy_str, log
+from create_tiles.config import (
+    SERVICE_CREATE_PANEL_URL,
+    FULL_WIDTH,
+    FULL_HEIGHT,
+    MAX_Z,
+    SAVE_DATA_NAME,
+    IMAGE_MARGIN_WIDTH,
+    IMAGE_MARGIN_HEIGHT,
+    MAP_TILES_Y,
+    TILE_SIZE,
+)
+from create_tiles.utils import (
+    game_tile_to_screen_coord,
+    screen_coord_to_map_tile,
+    check_exists,
+    parse_zxy_str,
+    log,
+)
 
 @priority_task(task_type="panel", retries=3, retry_delay_seconds=300)
 def create_panel(z: int, resolution: dict, tile_results: list):
@@ -32,9 +48,14 @@ def create_panel(z: int, resolution: dict, tile_results: list):
         "width": (FULL_WIDTH + 2 * IMAGE_MARGIN_WIDTH) // map_scale,
         "height": (FULL_HEIGHT + 2 * IMAGE_MARGIN_HEIGHT) // map_scale,
     }
+    # 上端と左端の、最大ズームレベルでの座標をオフセットにする
+    up_screen_x, up_screen_y = game_tile_to_screen_coord(0, 0)
+    up_map_x, up_map_y = screen_coord_to_map_tile(up_screen_x, up_screen_y, z)
+    left_screen_x, left_screen_y = game_tile_to_screen_coord(0, MAP_TILES_Y)
+    left_map_x, left_map_y = screen_coord_to_map_tile(left_screen_x, left_screen_y, z)
     offsets = {
-        "x": IMAGE_MARGIN_WIDTH * 4 // map_scale,
-        "y": IMAGE_MARGIN_HEIGHT * 4 // map_scale,
+        "x": left_map_x * TILE_SIZE,
+        "y": up_map_y * TILE_SIZE,
     }
     payload = {
         "z": z,
