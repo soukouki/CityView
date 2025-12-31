@@ -24,6 +24,7 @@ PAKSIZE=128
 # SAVE_DATA_NAME="demo1"
 # SAVE_DATA_NAME="yokoze-last"
 SAVE_DATA_NAME="kumagaya-last"
+# SAVE_DATA_NAME="kumagaya-first"
 # SAVE_DATA_NAME="npns-e1-2029"
 
 # マップの大きさについて
@@ -69,10 +70,8 @@ DELTA=200
 
 # スクショの糊代の大きさ(%)
 # 5にすると、上下左右それぞれ画像サイズの5%分が糊代になる
-# 基本は3%や5%で十分だが、山がちで地形が激しい場合は10%くらいにしても良い
-# 急坂など、一部のケースではなかなか推定が安定しない場合は25%くらいにしても良い
 # ズームして撮影する場合は2タイル分と比べて大きい方を採用する
-IMAGE_MERGIN_RATIO_PERCENT=20
+IMAGE_MERGIN_RATIO_PERCENT=5
 
 # 再描画待ち時間(秒)
 # 横瀬マップのように開発が極端に進んでいて、quarterやone_eighthで撮影する場合は1.0秒くらいにした方が良い

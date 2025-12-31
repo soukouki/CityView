@@ -47,8 +47,6 @@ services:
       - "8000:8000" # メイン
       - "8001:8001" # 管理画面
       - "8002:8002" # Prefect Agent連携用内部API
-    volumes:
-      - ./volume-backend-logs:/app/logs
     depends_on:
       db:
         condition: service_healthy
@@ -86,7 +84,8 @@ services:
     build: ./prefect
     command: prefect worker start --pool default-agent-pool
     environment:
-      PREFECT_LOGGING_LOG_PRINTS: "true"
+      PREFECT_LOGGING_LEVEL: "CRITICAL"
+      PREFECT_LOGGING_TO_API_ENABLED: false
       PREFECT_API_URL: http://prefect-server:4200/api
       SERVICE_CAPTURE_URL: http://service-capture:5000
       SERVICE_ESTIMATE_URL: http://service-estimate:5001
@@ -164,7 +163,7 @@ services:
       CAPTURE_CROP_HEIGHT: ${IMAGE_HEIGHT}
       CAPTURE_CROP_OFFSET_X: ${CROP_OFFSET_X}
       CAPTURE_CROP_OFFSET_Y: ${CROP_OFFSET_Y}
-      CAPTURE_REDRAW_WAIT_SECONDS: 1.0 # ズームレベルが低い場合は描画に時間がかかることがあるため長めに設定すること
+      CAPTURE_REDRAW_WAIT_SECONDS: ${CAPTURE_REDRAW_WAIT_SECONDS}
       CAPTURE_SCROT_SETTLE_SECONDS: 0.1 # scrotがフレームバッファを読み込むまでの待機時間
       CAPTURE_SCROT_TIMEOUT_SECONDS: 30
       CAPTURE_CROP_TIMEOUT_SECONDS: 30
@@ -177,7 +176,6 @@ services:
       GAME_BOOT_CHECK_Y: 256
     volumes:
       - ./volume-bin:/app/bin
-      - ./volume-save:/root/simutrans/save
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:5000/health"]
       interval: 30s

@@ -4,6 +4,7 @@ import numpy as np
 import requests
 import os
 import gc
+from math import sqrt
 
 app = Flask(__name__)
 
@@ -17,6 +18,13 @@ STORAGE_URL = os.getenv('STORAGE_URL')
 # 有効範囲のサイズを計算
 EFFECTIVE_WIDTH = IMAGE_WIDTH - 2 * IMAGE_MARGIN_WIDTH
 EFFECTIVE_HEIGHT = IMAGE_HEIGHT - 2 * IMAGE_MARGIN_HEIGHT
+MARGIN_AVG = (IMAGE_MARGIN_WIDTH + IMAGE_MARGIN_HEIGHT) / 2
+
+# スコアリングパラメータ
+TOP_N_MATCHES = 100
+SIFT_MAX_DISTANCE = 300.0
+PROXIMITY_REJECT_FACTOR = 3
+PROXIMITY_ZERO_FACTOR = 2
 
 
 def fetch_image(image_path):
@@ -42,27 +50,67 @@ def fetch_image(image_path):
         raise Exception(f"Failed to fetch image {image_path}: {str(e)}")
 
 
-def estimate_with_sift(target_img, ref_img, ref_x, ref_y):
+def calculate_sift_score(match_distance):
     """
-    SIFT特徴点マッチングで座標を推定
+    SIFTマッチのdistanceをスコア化（線形、0-1）
+    
+    Args:
+        match_distance: cv2.DMatchのdistance値
+    
+    Returns:
+        スコア（0.0-1.0、小さいdistanceほど高スコア）
+    """
+    score = max(0.0, 1.0 - match_distance / SIFT_MAX_DISTANCE)
+    return score
+
+
+def calculate_proximity_score(x, y, hint_x, hint_y):
+    """
+    ヒント座標との近さをスコア化（線形、0-1）
+    
+    Args:
+        x, y: 推定座標
+        hint_x, hint_y: ヒント座標
+    
+    Returns:
+        スコア（0.0-1.0、近いほど高スコア）、または None（除外対象）
+    """
+    distance = sqrt((x - hint_x)**2 + (y - hint_y)**2)
+    
+    # 距離がMARGIN_AVGの3倍を超えたら除外
+    if distance > PROXIMITY_REJECT_FACTOR * MARGIN_AVG:
+        return None
+    
+    # 線形スコア計算（2倍で0）
+    score = max(0.0, 1.0 - distance / (PROXIMITY_ZERO_FACTOR * MARGIN_AVG))
+    return score
+
+
+def collect_sift_candidates(target_img, ref_img, ref_x, ref_y, hint_x, hint_y, source_id):
+    """
+    1つの参照画像からSIFT候補を複数収集
     
     Args:
         target_img: 座標未知の画像
-        ref_img: 座標既知の画像
+        ref_img: 参照画像
         ref_x, ref_y: 参照画像の座標
+        hint_x, hint_y: ヒント座標
+        source_id: デバッグ用の識別子
     
     Returns:
-        推定座標 (x, y) or None
+        候補のリスト（辞書のリスト）
     """
+    candidates = []
+    
     try:
         # 縮小する(0.125倍)
         # 予想として、シムトラのスクショのズレは標高などの影響を受けるため、キリの良い値になる
-        target_img = cv2.resize(target_img, (0, 0), fx=0.125, fy=0.125, interpolation=cv2.INTER_LINEAR)
-        ref_img = cv2.resize(ref_img, (0, 0), fx=0.125, fy=0.125, interpolation=cv2.INTER_LINEAR)
-
+        target_resized = cv2.resize(target_img, (0, 0), fx=0.125, fy=0.125, interpolation=cv2.INTER_LINEAR)
+        ref_resized = cv2.resize(ref_img, (0, 0), fx=0.125, fy=0.125, interpolation=cv2.INTER_LINEAR)
+        
         # グレースケール変換
-        gray1 = cv2.cvtColor(target_img, cv2.COLOR_BGR2GRAY)
-        gray2 = cv2.cvtColor(ref_img, cv2.COLOR_BGR2GRAY)
+        gray1 = cv2.cvtColor(target_resized, cv2.COLOR_BGR2GRAY)
+        gray2 = cv2.cvtColor(ref_resized, cv2.COLOR_BGR2GRAY)
         
         # SIFT検出器
         sift = cv2.SIFT_create()
@@ -70,8 +118,8 @@ def estimate_with_sift(target_img, ref_img, ref_x, ref_y):
         kp2, des2 = sift.detectAndCompute(gray2, None)
         
         if des1 is None or des2 is None or len(kp1) < 4 or len(kp2) < 4:
-            print("SIFT matching failed: insufficient keypoints", flush=True)
-            return None
+            print(f"SIFT detection failed for {source_id}: insufficient keypoints", flush=True)
+            return []
         
         # BFMatcherでマッチング
         bf = cv2.BFMatcher()
@@ -86,27 +134,59 @@ def estimate_with_sift(target_img, ref_img, ref_x, ref_y):
                     good_matches.append(m)
         
         if len(good_matches) < 4:
-            print(f"SIFT matching failed: only {len(good_matches)} good matches", flush=True)
-            return None
+            print(f"SIFT matching failed for {source_id}: only {len(good_matches)} good matches", flush=True)
+            return []
         
-        # 対応点の座標を取得
-        src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches])
-        dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches])
+        # 距離でソート（良い順）
+        good_matches.sort(key=lambda m: m.distance)
         
-        # 平行移動量を計算（中央値で外れ値除去）
-        translations = dst_pts - src_pts
-        median_translation = np.median(translations, axis=0)
+        # 上位TOP_N_MATCHESを処理
+        for match in good_matches[:TOP_N_MATCHES]:
+            # このマッチから座標を推定
+            pt1 = kp1[match.queryIdx].pt
+            pt2 = kp2[match.trainIdx].pt
+            
+            # 移動量を計算（縮小前の座標系に戻す）
+            dx = (pt2[0] - pt1[0]) * 8
+            dy = (pt2[1] - pt1[1]) * 8
+            
+            # 推定座標
+            estimated_x = ref_x + dx
+            estimated_y = ref_y + dy
+            
+            # SIFTスコア計算
+            sift_score = calculate_sift_score(match.distance)
+            
+            # 近さスコア計算
+            proximity_score = calculate_proximity_score(
+                estimated_x, estimated_y, hint_x, hint_y
+            )
+            
+            # 除外判定
+            if proximity_score is None:
+                continue
+            
+            # 総合スコア
+            total_score = sift_score + proximity_score
+            
+            # 候補に追加
+            candidates.append({
+                'x': int(estimated_x),
+                'y': int(estimated_y),
+                'sift_score': sift_score,
+                'proximity_score': proximity_score,
+                'total_score': total_score,
+                'raw_sift_distance': match.distance,
+                'raw_proximity': sqrt((estimated_x - hint_x)**2 + (estimated_y - hint_y)**2),
+                'source': f'sift:{source_id}'
+            })
         
-        # 推定座標を計算
-        estimated_x = ref_x + median_translation[0] * 8
-        # CV座標系ではy軸が上向きだが、スクショ座標系では下向き
-        estimated_y = ref_y + median_translation[1] * 8
+        print(f"Collected {len(candidates)} candidates from {source_id}", flush=True)
+        return candidates
         
-        print(f"SIFT matching succeeded: estimated ({int(estimated_x)}, {int(estimated_y)})", flush=True)
-        return int(estimated_x), int(estimated_y)
     except Exception as e:
-        print(f"SIFT estimation failed: {str(e)}", flush=True)
-        return None
+        print(f"SIFT candidate collection failed for {source_id}: {str(e)}", flush=True)
+        return []
 
 
 def estimate_coordinate(target_img, adjacent_images, hint_x, hint_y):
@@ -125,17 +205,53 @@ def estimate_coordinate(target_img, adjacent_images, hint_x, hint_y):
     print(f"Target image size: {img_w}x{img_h}", flush=True)
     print(f"Effective area: {EFFECTIVE_WIDTH}x{EFFECTIVE_HEIGHT}", flush=True)
     print(f"Margins: {IMAGE_MARGIN_WIDTH}x{IMAGE_MARGIN_HEIGHT}", flush=True)
+    print(f"MARGIN_AVG: {MARGIN_AVG}", flush=True)
     print(f"Hint coordinates: ({hint_x}, {hint_y})", flush=True)
     
-    # 各隣接画像に対して処理
-    for ref_img, ref_x, ref_y in adjacent_images:
-        sift_result = estimate_with_sift(target_img, ref_img, ref_x, ref_y)
-        if sift_result is not None:
-            return sift_result
+    all_candidates = []
     
-    # 推定できない場合はヒント座標を返す
-    print(f"All estimation methods failed, returning hint: ({hint_x}, {hint_y})", flush=True)
-    return hint_x, hint_y
+    # 各参照画像から候補を収集
+    for idx, (ref_img, ref_x, ref_y) in enumerate(adjacent_images):
+        print(f"Processing reference image {idx} at ({ref_x}, {ref_y})", flush=True)
+        
+        candidates = collect_sift_candidates(
+            target_img, ref_img, ref_x, ref_y,
+            hint_x, hint_y, f'ref_{idx}'
+        )
+        
+        all_candidates.extend(candidates)
+    
+    # ヒント座標を候補として追加
+    hint_candidate = {
+        'x': hint_x,
+        'y': hint_y,
+        'sift_score': 0.0,
+        'proximity_score': 1.0,
+        'total_score': 1.0,
+        'raw_sift_distance': float('inf'),
+        'raw_proximity': 0.0,
+        'source': 'hint'
+    }
+    all_candidates.append(hint_candidate)
+    
+    print(f"Total candidates (including hint): {len(all_candidates)}", flush=True)
+    
+    # 総合スコアでソート
+    all_candidates.sort(key=lambda c: c['total_score'], reverse=True)
+    
+    # トップ5をログ出力
+    print("Top 5 candidates:", flush=True)
+    for i, c in enumerate(all_candidates[:5]):
+        print(f"  {i+1}. ({c['x']}, {c['y']}) "
+              f"total={c['total_score']:.3f} "
+              f"(sift={c['sift_score']:.3f}, prox={c['proximity_score']:.3f}) "
+              f"source={c['source']}", flush=True)
+    
+    # 最良の候補を返す
+    best = all_candidates[0]
+    print(f"Selected: ({best['x']}, {best['y']}) from {best['source']}", flush=True)
+    
+    return best['x'], best['y']
 
 
 @app.route('/estimate', methods=['POST'])

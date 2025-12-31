@@ -84,6 +84,30 @@ class CaptureStrategy:
             ideal_x = x + (self.map_y - y)
         
         return ideal_x, ideal_y
+
+    def _up(self, x: int, y: int) -> Tuple[int, int]:
+        """上側への移動（境界制限付き）"""
+        ideal_x = x - self.delta // 2
+        ideal_y = y - self.delta // 2
+        
+        if ideal_x < 0:
+            ideal_x = 0
+            ideal_y = y - x
+        if ideal_y < 0:
+            ideal_y = 0
+            ideal_x = x - y
+        
+        return ideal_x, ideal_y
+    
+    def _exists_in_screenshots(self, x: int, y: int, screenshots: List[List[Dict]], exclude: Tuple[int, int]=None) -> bool:
+        """指定座標が既にscreenshots内に存在するか確認"""
+        for group in screenshots:
+            for shot in group:
+                if exclude and shot['x'] == exclude[0] and shot['y'] == exclude[1]:
+                    continue
+                if shot['x'] == x and shot['y'] == y:
+                    return True
+        return False
     
     def _generate_x_ge_y(self, screenshots: List[List[Dict]]):
         """map_x >= map_yの場合の生成ロジック"""
@@ -148,12 +172,17 @@ class CaptureStrategy:
                 new_x, new_y = self._left(current_x, current_y)
                 if new_x == current_x and new_y == current_y:
                     break
+                compare = [{'x': current_x, 'y': current_y}]
+                up_x, up_y = self._up(new_x, new_y)
+                if self._exists_in_screenshots(up_x, up_y, screenshots, exclude=(current_x, current_y)):
+                    compare.append({'x': up_x, 'y': up_y})
                 screenshots[-1].append({
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
-                    'compare': [{'x': current_x, 'y': current_y}],
+                    'compare': compare,
                     'priority': priority,
                 })
+                print(f"Added {screenshots[-1][-1]}")
                 area_id += 1
                 current_x, current_y = new_x, new_y
                 priority -= 1
@@ -182,10 +211,14 @@ class CaptureStrategy:
                 new_x, new_y = self._down(current_x, current_y)
                 if new_x == current_x and new_y == current_y:
                     break
+                compare = [{'x': current_x, 'y': current_y}]
+                right_x, right_y = self._right(new_x, new_y)
+                if self._exists_in_screenshots(right_x, right_y, screenshots, exclude=(current_x, current_y)):
+                    compare.append({'x': right_x, 'y': right_y})
                 screenshots[-1].append({
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
-                    'compare': [{'x': current_x, 'y': current_y}],
+                    'compare': compare,
                     'priority': priority,
                 })
                 area_id += 1
@@ -261,10 +294,14 @@ class CaptureStrategy:
                 new_x, new_y = self._right(current_x, current_y)
                 if new_x == current_x and new_y == current_y:
                     break
+                up_x, up_y = self._up(new_x, new_y)
+                compare = [{'x': current_x, 'y': current_y}]
+                if self._exists_in_screenshots(up_x, up_y, screenshots, exclude=(current_x, current_y)):
+                    compare.append({'x': up_x, 'y': up_y})
                 screenshots[-1].append({
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
-                    'compare': [{'x': current_x, 'y': current_y}],
+                    'compare': compare,
                     'priority': priority,
                 })
                 area_id += 1
@@ -295,10 +332,14 @@ class CaptureStrategy:
                 new_x, new_y = self._down(current_x, current_y)
                 if new_x == current_x and new_y == current_y:
                     break
+                left_x, left_y = self._left(new_x, new_y)
+                compare = [{'x': current_x, 'y': current_y}]
+                if self._exists_in_screenshots(left_x, left_y, screenshots, exclude=(current_x, current_y)):
+                    compare.append({'x': left_x, 'y': left_y})
                 screenshots[-1].append({
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
-                    'compare': [{'x': current_x, 'y': current_y}],
+                    'compare': compare,
                     'priority': priority,
                 })
                 area_id += 1
@@ -313,7 +354,7 @@ class CaptureStrategy:
 
 # テスト
 if __name__ == "__main__":
-    strategy = CaptureStrategy(map_x=512, map_y=32, delta=80)
+    strategy = CaptureStrategy(map_x=512, map_y=32, delta=20)
     area_groups = strategy.generate_capture_areas_groups()
     
     for group_idx, group in enumerate(area_groups):
