@@ -6,7 +6,8 @@ pull:
       directory: /opt/prefect/flows
 
 deployments:
-  - name: create-tiles-default
+  - name: create-tiles
     entrypoint: create_tiles_flow.py:create_tiles
+    concurrency_limit: 1
     work_pool:
       name: default-agent-pool

@@ -145,7 +145,7 @@ services:
       cd /opt/prefect/flows &&
       prefect deploy --all &&
       echo 'Verifying deployment...' &&
-      prefect deployment inspect 'create_tiles/create-tiles-default' &&
+      prefect deployment inspect 'create_tiles/create-tiles' &&
       echo 'Initialization complete!'
       "
     restart: "no"

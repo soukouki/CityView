@@ -118,38 +118,198 @@
   - Prefect Agent 内部 API: `8002`
 - **エンドポイント**:
 
-##### メイン画面
+##### メイン画面(ポート `8000`)
 | メソッド | パス | 説明 |
 |---|---|---|
 | GET | `/` | メイン画面HTML配信 |
 | GET | `/assets/*` | 静的ファイル配信 |
 
-##### 管理画面
+##### メイン画面API(ポート `8000`)
+| メソッド | パス | 説明 | リクエスト | レスポンス |
+|---|---|---|---|---|
+| GET | `/tiles/{map_id}/{z}/{x}/{y}.avif` | タイル画像配信（storage `/images/tiles/` へプロキシ） |
+| GET | `/panels/{map_id}/{filename}` | 一枚絵画像配信（storage `/images/panels/` へプロキシ） |
+| GET | `/api/maps` | マップ一覧取得 | - | 下記参照 |
+
+- **`/api/maps` リクエストボディ**
+  ```json
+  [
+    {
+      "map_id": number,
+      "status": "completed",
+      "description": "string",
+      "copyright": "string",
+      "game_path": "string",
+      "pakset": "string",
+      "paksize": number,
+      "save_data": "string",
+      "map_size": {
+        "width": number,
+        "height": number
+      },
+      "panels": [
+        {
+          "filename": "string",
+          "name": "string",
+          "path": "string",
+          "resolution": {
+            "width": number,
+            "height": number
+          }
+        }
+      ],
+      "zoom_level": "one_eighth" | "quarter" | "half" | "normal" | "double",
+      "published_at": "string", // マップを生成し終わって公開した日時
+    }
+  ]
+  ```
+
+##### 管理画面(ポート `8001`)
 | メソッド | パス | 説明 |
 |---|---|---|
 | GET | `/` | 管理画面HTML配信 |
 | GET | `/assets/*` | 静的ファイル配信 |
 
-##### 管理画面 API
+##### 管理画面API(ポート `8001`)
 | メソッド | パス | 説明 | リクエスト | レスポンス |
 |---|---|---|---|---|
-| POST | `/api/tiles/create` | タイル生成ジョブ作成、Flow起動 | `{"game_id": "string", "save_data_name": "string"}` | `{"job_id": 0, "status": "string", "flow_run_id": "string"}` |
-| GET | `/api/status` | 全ジョブのステータス一覧取得 | - | `[{"job_id": 0, "status": "string", "progress": 0.0, "total_tiles": 0, "created_tiles": 0}]` |
+| GET | `/api/status` | サービスのステータス取得 | - | 下記参照 |
+| GET | `/api/options` | マップ生成オプション取得 | - | 下記参照 |
+| POST | `/api/maps` | マップ生成ジョブ作成、Flow起動 | 下記参照 | `{"job_id": "string"}` |
 
-##### Prefect Agent 専用内部 API
+
+- **`/api/status` レスポンスボディ**
+  ```json
+  {
+    // 基本/api/mapsと同じ内容だが、ステータスがprocessingやfailedのものも含む
+    "maps": [
+      {
+        "map_id": number,
+        "status": "processing" | "completed" | "failed",
+        "description": "string",
+        "copyright": "string",
+        "game_path": "string",
+        "pakset": "string",
+        "paksize": number,
+        "save_data": "string",
+        "map_size": {
+          "width": number,
+          "height": number
+        },
+        "panels": [
+          {
+            "filename": "string",
+            "name": "string",
+            "path": "string",
+            "resolution": {
+              "width": number,
+              "height": number
+            }
+          }
+        ],
+        "zoom_level": "one_eighth" | "quarter" | "half" | "normal" | "double",
+        "published_at": "string", // マップを生成し終わって公開した日時
+        "created_at": "string",   // マップ生成ジョブ作成日時
+        "started_at": "string",   // マップ生成ジョブ開始日時
+      }
+    ],
+    "jobs": [
+      {
+        "job_id": "string",
+        "job_name": "string",
+        "map_id": number,
+        "state": "string", // PrefectのName側を使う。CompletedやFailed、Cancelledなども含む
+        "map_id": number,
+        "progress": {
+          "completed": number,
+          "total": number
+        },
+        "created_at": "string",
+        "started_at": "string",
+      }
+    ]
+  }
+  ```
+
+- **`/api/options` レスポンスボディ**
+  ```json
+  {
+    // ゲームが入っているフォルダ(フォルダ内には複数pakset、複数本体がある)
+    "folders": [
+      {
+        "folder_path": "string",
+        "binaries": [
+          {
+            "name": "string"
+          }
+        ],
+        "paksets": [
+          {
+            "name": "string",
+          }
+        ],
+        "save_datas": [
+          {
+            "name": "string",
+          }
+        ]
+      }
+    ],
+    // 各サービスの並行処理可能数(予想処理時間を計算するため)
+    "threads": {
+      "all": number,
+      "service-capture": number,
+      "service-estimate": number,
+      "service-tile-cut": number,
+      "service-tile-merge": number,
+      "service-tile-compress": number,
+      "service-create-panel": number
+    }
+  }
+  ```
+
+- **`api/maps` リクエストボディ**
+  ```json
+  {
+    "folder_path": "string",       // ゲームフォルダパス
+    "binary_name": "string",       // 使用する本体名
+    "pakset_name": "string",       // 使用するpakset名
+    "paksize": number,             // pakサイズ
+    "save_data_name": "string",    // 使用するセーブデータ名
+    "map_size": {                  // マップサイズ
+      "width": number,             // x方向のマップサイズ(タイル数)
+      "height": number             // y方向のマップサイズ(タイル数)
+    },
+    "zoom_level": "one_eighth" | "quarter" | "half" | "normal" | "double",
+    "adjusted_paksize": number,    // ズームレベルに応じた調整後pakサイズ
+    "tile_size": number,           // タイルサイズ(px)
+    "tile_quality_max_zoom": "lossless" | number, // "lossless"または0〜100の整数
+    "tile_quality_other":    "lossless" | number, // "lossless"または0〜100の整数
+    "tile_group_size": number,     // タイルのタスク処理をグルーピングする際の縦横ｔイル数(なので、1グループあたりのタイル数の最大値はその2乗)
+    "delta": number,               // スクリーンショット間の移動タイル数((0,0)->(delta/2, delta/2)という感じで移動する)
+    "capture_redraw_wait_seconds": number, // スクリーンショット撮影前の描画待ち時間
+    "capture": {
+      "crop_offset_x": number,     // 撮影時の左右クロップ幅(px)
+      "crop_offset_y": number,     // 撮影時の上下クロップ高さ(px)
+      "margin_width": number,      // 画像の左右のりしろ幅(px)
+      "margin_height": number,     // 画像の上下のりしろ高さ(px)
+      "effective_width": number,   // 画像ののりしろを除いた有効幅(px)
+      "effective_height": number,  // 画像ののりしろを除いた有効高さ(px)
+      "image_width": number,       // 画像の横幅(px)
+      "image_height": number,      // 画像の縦幅(px)
+      "capture_width": number,     // 撮影時の横幅(px)
+      "capture_height": number,    // 撮影時の縦幅(px)
+    }
+  }
+  ```
+
+##### Prefect Agent専用内部API(ポート `8002`)
 | メソッド | パス | 説明 | リクエスト | レスポンス |
 |---|---|---|---|---|
-| POST | `/api/internal/screenshots` | スクリーンショットメタデータ保存 | `{"job_id": 0, "screenshot_id": "string", "x": 0, "y": 0, "filepath": "string"}` | `{"success": true}` |
-| PUT | `/api/internal/screenshots/{screenshot_id}` | スクリーンショットの推定座標更新 | `{"estimated_x": 0, "estimated_y": 0}` | `{"success": true}` |
-| DELETE | `/api/internal/screenshots/{screenshot_id}` | スクリーンショット削除（DB） | - | `{"success": true}` |
-| POST | `/api/internal/tiles` | タイルメタデータ保存（未圧縮） | `{"job_id": 0, "tiles": [{"z": 0, "x": 0, "y": 0, "filepath": "string", "source_type": "string"}]}` | `{"success": true}` |
-| PUT | `/api/internal/tiles/compress` | タイル圧縮完了を記録 | `{"tile_ids": [0, 1, 2], "compressed_filepath": "string"}` | `{"success": true}` |
-| DELETE | `/api/internal/tiles/{tile_id}` | タイル削除（DB） | - | `{"success": true}` |
-
-##### タイル配信 API
-| メソッド | パス | 説明 |
-|---|---|---|
-| GET | `/tiles/{map_id}/{z}/{x}/{y}.avif` | タイル画像配信（storage `/images/tiles/` へプロキシ） |
+| POST | `/api/screenshots` | スクリーンショットメタデータ保存 | `{"map_id": number, "game_tile": {"x": number, "y": number}, "path": "string"}` | `{"screenshot_id": "string"}` |
+| GET | `/api/screenshots/
+| PUT | `/api/screenshots/{screenshot_id}` | スクリーンショットの推定座標更新 |
+| POST | `/api/panels` | 一枚絵メタデータ保存 |
 
 ### 2.3 Prefect層
 
