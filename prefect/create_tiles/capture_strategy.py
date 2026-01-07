@@ -182,7 +182,6 @@ class CaptureStrategy:
                     'compare': compare,
                     'priority': priority,
                 })
-                print(f"Added {screenshots[-1][-1]}")
                 area_id += 1
                 current_x, current_y = new_x, new_y
                 priority -= 1
@@ -354,7 +353,11 @@ class CaptureStrategy:
 
 # テスト
 if __name__ == "__main__":
-    strategy = CaptureStrategy(map_x=512, map_y=32, delta=20)
+    import os
+    map_x = int(os.getenv("MAP_TILES_X", "512"))
+    map_y = int(os.getenv("MAP_TILES_Y", "32"))
+    delta = int(os.getenv("DELTA", "20"))
+    strategy = CaptureStrategy(map_x, map_y, delta)
     area_groups = strategy.generate_capture_areas_groups()
     
     for group_idx, group in enumerate(area_groups):

@@ -58,7 +58,6 @@ def create_tiles():
     for group in areas_groups:
         for area in group:
             areas_to_group[(area['x'], area['y'])] = group
-    areas_groups_sorted = sorted(areas_groups, key=lambda g: g[0]['priority'], reverse=True)
     print(f"Total capture areas: {len(areas_to_group)}")
 
     # ---------- スクショ撮影タスク ----------
@@ -86,11 +85,10 @@ def create_tiles():
 
     # ---------- スクショ座標推定タスク ----------
     estimate_tasks = {}
-    for group in areas_groups_sorted:
+    for group in areas_groups:
         # capture_gの結果の複数のoutput_pathをestimate_gの外で分解することはできないので、関数に渡してから分解する必要がある
         # なので、具体的なestimate関数の引数の組み立てはestimate_gで行う
         # しかし、すべての情報を与えると依存関係が増えすぎるので、必要なものだけを渡す
-        needed_tasks_gx_gy = []
         needed_capture_tasks = []
         needed_estimate_tasks = []
 
@@ -104,12 +102,12 @@ def create_tiles():
                 belonging_group = areas_to_group[(comp['x'], comp['y'])]
                 gxb = belonging_group[0]['x']
                 gyb = belonging_group[0]['y']
-                if (gxb, gyb) in needed_tasks_gx_gy: # 重複チェック
-                    continue
-                needed_tasks_gx_gy.append((gxb, gyb))
                 needed_capture_tasks.append(capture_tasks[f"capture_g_x{gxb}_y{gyb}"])
-                if belonging_group != group: # 自分自身のestimateは不要
+                if belonging_group[0]['area_id'] != group[0]['area_id']: # 自分自身のestimateは不要
                     needed_estimate_tasks.append(estimate_tasks[f"estimate_g_x{gxb}_y{gyb}"])
+        # 重複を排除
+        needed_capture_tasks = list(set(needed_capture_tasks))
+        needed_estimate_tasks = list(set(needed_estimate_tasks))
         task_id = f"estimate_g_x{gx}_y{gy}"
         priority = group[0]['priority']
         estimate_tasks[task_id] = estimate_g.with_options(
@@ -137,7 +135,7 @@ def create_tiles():
     # 各エリアのカバー範囲を事前計算
     print("Calculating area coverage...")
     area_coverage = []
-    for group in areas_groups_sorted:
+    for group in areas_groups:
         for area in group:
             # areaのx, y座標はゲーム内タイル座標
             screen_coord = game_tile_to_screen_lefttop_coord(area['x'], area['y'])
@@ -225,7 +223,6 @@ def create_tiles():
         # capture_gとestimate_gの結果をtile_cut_gの外で分解することはできないので、関数に渡してから分解する必要がある
         # なので、具体的なtile_cut関数の引数の組み立てはtile_cut_gで行う
         # しかし、すべての情報を与えると依存関係が増えすぎるので、必要なものだけを渡す
-        needed_tasks_gx_gy = set()
         needed_capture_tasks = []
         needed_estimate_tasks = []
         
@@ -236,13 +233,15 @@ def create_tiles():
             gxb = belonging_group[0]['x']
             gyb = belonging_group[0]['y']
             
-            # 依存タスクの登録（重複チェック付き）
-            if (gxb, gyb) not in needed_tasks_gx_gy:
-                needed_tasks_gx_gy.add((gxb, gyb))
-                needed_capture_tasks.append(capture_tasks[f"capture_g_x{gxb}_y{gyb}"])
-                needed_estimate_tasks.append(estimate_tasks[f"estimate_g_x{gxb}_y{gyb}"])
+            # 依存タスクの登録
+            needed_capture_tasks.append(capture_tasks[f"capture_g_x{gxb}_y{gyb}"])
+            needed_estimate_tasks.append(estimate_tasks[f"estimate_g_x{gxb}_y{gyb}"])
             
             related_areas.append({"x": ax, "y": ay})
+        
+        # 重複を排除
+        needed_capture_tasks = list(set(needed_capture_tasks))
+        needed_estimate_tasks = list(set(needed_estimate_tasks))
 
         task_id = f"tile_cut_g_z{MAX_Z}_gx{gx}_gy{gy}"
         tile_cut_tasks[task_id] = tile_cut_g.with_options(

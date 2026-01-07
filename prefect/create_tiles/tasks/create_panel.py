@@ -54,7 +54,7 @@ def create_panel(z: int, resolution: dict, tile_results: list):
     left_screen_x, left_screen_y = game_tile_to_screen_coord(0, MAP_TILES_Y)
     left_map_x, left_map_y = screen_coord_to_map_tile(left_screen_x, left_screen_y, z)
     offsets = {
-        "x": left_map_x * TILE_SIZE,
+        "x": int(left_map_x * TILE_SIZE / 1.5), # なんかズレているので気合で微修正
         "y": up_map_y * TILE_SIZE,
     }
     payload = {

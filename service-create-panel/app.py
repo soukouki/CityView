@@ -118,8 +118,7 @@ def create_panel():
         logger.info(f"一枚絵生成開始: z={z}, タイル数={len(tiles)}, マップサイズ={map_width}x{map_height}px, 解像度={target_width}x{target_height}px, オフセット=({offset_x},{offset_y})px, 出力先={output_path}")
         
         # ステップ3: キャンバス作成とタイル配置
-        # ちょっと大きめのキャンバスを作成(どれくらい大きくするかは迷ったけれど、offset分を足すことにした)
-        canvas = Image.new('RGB', (map_width + offset_x, map_height + offset_y), color=(64, 64, 64))
+        canvas = Image.new('RGB', (map_width, map_height), color=(64, 64, 64))
         
         for tile in tiles:
             logger.info(f"タイル配置中: x={tile['x']}, y={tile['y']}, path={tile['path']}")
