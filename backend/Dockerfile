@@ -1,23 +1,31 @@
-FROM nginx:alpine
+FROM debian:trixie-slim
 
-# 必要なパッケージのインストール（gettext for envsubst）
-RUN apk add --no-cache ruby ruby-dev ruby-bundler build-base gettext
+RUN apt-get update && apt-get install -y \
+    nginx \
+    ruby \
+    ruby-dev \
+    build-essential \
+    libpq-dev \
+    curl \
+    gettext-base \
+    && gem install bundler \
+    && rm -rf /var/lib/apt/lists/*
 
-# 作業ディレクトリの作成
-WORKDIR /app
+RUN ln -sf /dev/stdout /var/log/nginx/access.log \
+    && ln -sf /dev/stderr /var/log/nginx/error.log
 
-# Gemfileのコピーと依存関係のインストール
-COPY Gemfile Gemfile.lock ./
+WORKDIR /app/app
+
+COPY app/Gemfile app/Gemfile.lock ./
 RUN bundle install
 
-# アプリケーションファイルのコピー
-COPY app.rb ./
+WORKDIR /app
+
+COPY app ./app
 COPY public ./public
 
-# nginx設定のコピー
 COPY nginx.conf /etc/nginx/nginx.conf
 
-# スタートアップスクリプト
 COPY start.sh ./
 RUN chmod +x start.sh
 

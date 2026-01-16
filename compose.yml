@@ -43,6 +43,30 @@ services:
       DATABASE_URL: postgres://postgres@db:5432/app
       PREFECT_API_URL: http://prefect-server:4200/api
       STORAGE_URL: http://storage
+      SIMUTRANS_EXECUTABLE: ${SIMUTRANS_EXECUTABLE}
+      PAKSET_NAME: ${PAKSET_NAME}
+      PAKSIZE: ${PAKSIZE}
+      SAVE_DATA_NAME: ${SAVE_DATA_NAME}
+      MAP_TILES_X: ${MAP_TILES_X}
+      MAP_TILES_Y: ${MAP_TILES_Y}
+      TILE_SIZE: ${TILE_SIZE}
+      TILE_QUALITY_MAX_ZOOM: ${TILE_QUALITY_MAX_ZOOM}
+      TILE_QUALITY_OTHER: ${TILE_QUALITY_OTHER}
+      TILE_GROUP_SIZE: ${TILE_GROUP_SIZE}
+      DELTA: ${DELTA}
+      CROP_OFFSET_X: ${CROP_OFFSET_X}
+      CROP_OFFSET_Y: ${CROP_OFFSET_Y}
+      IMAGE_MARGIN_WIDTH: ${IMAGE_MARGIN_WIDTH}
+      IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
+      IMAGE_EFFECTIVE_WIDTH: ${IMAGE_EFFECTIVE_WIDTH}
+      IMAGE_EFFECTIVE_HEIGHT: ${IMAGE_EFFECTIVE_HEIGHT}
+      IMAGE_WIDTH: ${IMAGE_WIDTH}
+      IMAGE_HEIGHT: ${IMAGE_HEIGHT}
+      CAPTURE_WIDTH: ${CAPTURE_WIDTH}
+      CAPTURE_HEIGHT: ${CAPTURE_HEIGHT}
+      ADJUSTED_PAKSIZE: ${ADJUSTED_PAKSIZE}
+      ZOOM_LEVEL: ${ZOOM_LEVEL}
+      CAPTURE_REDRAW_WAIT_SECONDS: ${CAPTURE_REDRAW_WAIT_SECONDS}
     ports:
       - "8000:8000" # メイン
       - "8001:8001" # 管理画面
@@ -57,6 +81,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    volumes:
+      - ./volume-bin:/app/bin
     restart: unless-stopped
 
   # --- Prefect Layer ---

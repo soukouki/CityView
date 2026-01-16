@@ -238,17 +238,18 @@
         "folder_path": "string",
         "binaries": [
           {
-            "name": "string"
+            "name": "string",
+            "path": "string"
           }
         ],
         "paksets": [
           {
-            "name": "string",
+            "name": "string"
           }
         ],
         "save_datas": [
           {
-            "name": "string",
+            "name": "string"
           }
         ]
       }

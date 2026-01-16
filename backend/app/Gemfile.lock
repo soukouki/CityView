@@ -2,10 +2,22 @@ GEM
   remote: https://rubygems.org/
   specs:
     base64 (0.3.0)
+    bigdecimal (4.0.1)
+    csv (3.3.5)
+    dotenv (2.8.1)
+    httparty (0.24.2)
+      csv
+      mini_mime (>= 1.0.0)
+      multi_xml (>= 0.5.2)
     json (2.18.0)
+    mini_mime (1.1.5)
+    multi_xml (0.8.1)
+      bigdecimal (>= 3.1, < 5)
     mustermann (3.0.4)
       ruby2_keywords (~> 0.0.1)
     nio4r (2.7.5)
+    pg (1.6.3)
+    pg (1.6.3-x86_64-linux)
     puma (6.6.1)
       nio4r (~> 2.0)
     rack (2.2.21)
@@ -13,6 +25,8 @@ GEM
       base64 (>= 0.1.0)
       rack (~> 2.2, >= 2.2.4)
     ruby2_keywords (0.0.5)
+    sequel (5.100.0)
+      bigdecimal
     sinatra (3.2.0)
       mustermann (~> 3.0)
       rack (~> 2.2, >= 2.2.4)
@@ -25,9 +39,14 @@ PLATFORMS
   x86_64-linux
 
 DEPENDENCIES
+  dotenv (~> 2.8)
+  httparty (~> 0.21)
   json (~> 2.6)
+  pg (~> 1.5)
   puma (~> 6.0)
+  rack (~> 2.2)
+  sequel (~> 5.0)
   sinatra (~> 3.0)
 
 BUNDLED WITH
-   2.5.22
+   2.7.1

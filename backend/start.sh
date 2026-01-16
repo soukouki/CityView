@@ -8,7 +8,7 @@ envsubst '${STORAGE_HOST}' < /etc/nginx/nginx.conf > /etc/nginx/nginx.conf.tmp
 mv /etc/nginx/nginx.conf.tmp /etc/nginx/nginx.conf
 
 # Sinatraアプリケーションをバックグラウンドで起動
-cd /app
+cd /app/app
 bundle exec ruby app.rb &
 
 # nginxをフォアグラウンドで起動
