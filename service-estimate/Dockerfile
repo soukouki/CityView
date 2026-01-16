@@ -24,5 +24,5 @@ COPY app.py .
 
 EXPOSE 5001
 
-# gunicornで起動（2ワーカー、タイムアウト120秒）
-CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "2", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app:app"]
+# gunicornで起動
+CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-", "app:app"]

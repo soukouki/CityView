@@ -24,5 +24,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # ポート公開
 EXPOSE 5003
 
-# Gunicornで実行（ワーカー2、スレッド4で並列処理）
-CMD ["gunicorn", "--bind", "0.0.0.0:5003", "--workers", "2", "--threads", "4", "--timeout", "120", "app:app"]
+# Gunicornで実行
+CMD ["gunicorn", "--bind", "0.0.0.0:5003", "--threads", "4", "--timeout", "120", "app:app"]
