@@ -198,7 +198,6 @@
         },
         "panels": [
           {
-            "filename": "string",
             "name": "string",
             "path": "string",
             "resolution": {
@@ -209,8 +208,8 @@
         ],
         "zoom_level": "one_eighth" | "quarter" | "half" | "normal" | "double",
         "published_at": "string", // マップを生成し終わって公開した日時
-        "created_at": "string",   // マップ生成ジョブ作成日時
         "started_at": "string",   // マップ生成ジョブ開始日時
+        "created_at": "string"    // マップ生成ジョブ作成日時
       }
     ],
     "jobs": [
@@ -219,13 +218,12 @@
         "job_name": "string",
         "map_id": number,
         "state": "string", // PrefectのName側を使う。CompletedやFailed、Cancelledなども含む
-        "map_id": number,
         "progress": {
           "completed": number,
           "total": number
         },
-        "created_at": "string",
         "started_at": "string",
+        "created_at": "string"
       }
     ]
   }
