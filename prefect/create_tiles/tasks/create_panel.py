@@ -1,16 +1,6 @@
 import requests
 from create_tiles.priority_task import priority_task
-from create_tiles.config import (
-    SERVICE_CREATE_PANEL_URL,
-    FULL_WIDTH,
-    FULL_HEIGHT,
-    MAX_Z,
-    SAVE_DATA_NAME,
-    IMAGE_MARGIN_WIDTH,
-    IMAGE_MARGIN_HEIGHT,
-    MAP_TILES_Y,
-    TILE_SIZE,
-)
+from create_tiles.config import (SERVICE_CREATE_PANEL_URL)
 from create_tiles.utils import (
     game_tile_to_screen_coord,
     screen_coord_to_map_tile,
@@ -18,9 +8,10 @@ from create_tiles.utils import (
     parse_zxy_str,
     log,
 )
+from create_tiles.flow_params import CreateTilesParams
 
 @priority_task(task_type="panel", retries=3, retry_delay_seconds=300)
-def create_panel(z: int, resolution: dict, tile_results: list):
+def create_panel(params: CreateTilesParams, z: int, resolution: dict, tile_results: list):
     log(f"Creating panel at zoom level {z} with resolution {resolution}")
     log(f"Received {len(tile_results)} tile groups")
     for tile_result in tile_results:
@@ -37,25 +28,26 @@ def create_panel(z: int, resolution: dict, tile_results: list):
                 "x": cx,
                 "y": cy,
             })
-    output_path = f"/images/panels/{SAVE_DATA_NAME}/panel_{resolution['id']}_x{resolution['width']}_y{resolution['height']}.png"
+    output_path = f"/images/panels/{params['save_data_name']}/panel_{resolution['id']}_x{resolution['width']}_y{resolution['height']}.png"
     if check_exists(output_path):
         log(f"  Output already exists at {output_path}, skipping panel creation.")
         return output_path
     
     url = f"{SERVICE_CREATE_PANEL_URL}/create_panel"
-    map_scale = 2 ** (MAX_Z - z)
+    map_scale = 2 ** (params['max_z'] - z)
     map_size = {
-        "width": (FULL_WIDTH + 2 * IMAGE_MARGIN_WIDTH) // map_scale,
-        "height": (FULL_HEIGHT + 2 * IMAGE_MARGIN_HEIGHT) // map_scale,
+        "width": (params.full_width + 2 * params['capture']['margin_width']) // map_scale,
+        "height": (params.full_height + 2 * params['capture']['margin_height']) // map_scale,
     }
     # 上端と左端の、最大ズームレベルでの座標をオフセットにする
-    up_screen_x, up_screen_y = game_tile_to_screen_coord(0, 0)
-    up_map_x, up_map_y = screen_coord_to_map_tile(up_screen_x, up_screen_y, z)
-    left_screen_x, left_screen_y = game_tile_to_screen_coord(0, MAP_TILES_Y)
-    left_map_x, left_map_y = screen_coord_to_map_tile(left_screen_x, left_screen_y, z)
+    up_screen_x, up_screen_y = game_tile_to_screen_coord(params, 0, 0)
+    up_map_x, up_map_y = screen_coord_to_map_tile(params, up_screen_x, up_screen_y, z)
+    left_screen_x, left_screen_y = game_tile_to_screen_coord(params, 0, params['map_tiles_y'])
+    left_map_x, left_map_y = screen_coord_to_map_tile(params, left_screen_x, left_screen_y, z)
+    tile_size = params['tile_size']
     offsets = {
-        "x": int(left_map_x * TILE_SIZE / 1.5), # なんかズレているので気合で微修正
-        "y": up_map_y * TILE_SIZE,
+        "x": int(left_map_x * tile_size / 1.5), # なんかズレているので気合で微修正
+        "y": up_map_y * tile_size,
     }
     payload = {
         "z": z,

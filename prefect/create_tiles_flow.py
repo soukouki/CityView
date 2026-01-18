@@ -2,29 +2,13 @@ from prefect import flow
 from datetime import timedelta, datetime
 import math
 from collections import defaultdict
+from typing import Annotated
+from pydantic import Field
 from create_tiles.priority_task_runner import PriorityTaskRunner
 from create_tiles.capture_strategy import CaptureStrategy
-from create_tiles.config import (
-    DELTA,
-    MAP_TILES_X,
-    MAP_TILES_Y,
-    IMAGE_WIDTH,
-    IMAGE_HEIGHT,
-    IMAGE_MARGIN_WIDTH,
-    IMAGE_MARGIN_HEIGHT,
-    TILE_GROUP_SIZE,
-    TILE_QUALITY_MAX_ZOOM,
-    TILE_QUALITY_OTHER,
-    TILE_SIZE,
-    MAX_Z,
-    FULL_WIDTH,
-    FULL_HEIGHT,
-)
 from create_tiles.utils import (
-    game_tile_to_screen_coord,
     game_tile_to_screen_lefttop_coord,
     screen_coord_to_map_tile,
-    map_tile_to_screen_coord,
 )
 from create_tiles.tasks.capture_g import capture_g
 from create_tiles.tasks.estimate_g import estimate_g
@@ -32,6 +16,7 @@ from create_tiles.tasks.tile_cut_g import tile_cut_g
 from create_tiles.tasks.tile_merge_g import tile_merge_g
 from create_tiles.tasks.tile_compress_g import tile_compress_g
 from create_tiles.tasks.create_panel import create_panel
+from create_tiles.flow_params import CreateTilesParams, MapSize, ZoomLevel, TileQuality, CaptureConfig
 
 @flow(
     name='create_tiles',
@@ -47,11 +32,45 @@ from create_tiles.tasks.create_panel import create_panel
         },
     ),
 )
-def create_tiles():
+def create_tiles(
+    folder_path: Annotated[str, Field(description="ゲームフォルダのパス")],
+    binary_name: Annotated[str, Field(description="ゲーム実行ファイル名")],
+    pakset_name: Annotated[str, Field(description="pakset名")],
+    paksize: Annotated[int, Field(description="pakサイズ")],
+    save_data_name: Annotated[str, Field(description="セーブデータ名")],
+    map_size: Annotated[MapSize, Field(description="マップサイズ")],
+    zoom_level: Annotated[ZoomLevel, Field(description="ズームレベル")],
+    tile_size: Annotated[int, Field(description="地図タイルの解像度(px)")],
+    tile_quality_max_zoom: Annotated[TileQuality, Field(description="最大ズーム時の画質")],
+    tile_quality_other: Annotated[TileQuality, Field(description="通常時の画質")],
+    tile_group_size: Annotated[int, Field(description="タイルグループサイズ")],
+    delta: Annotated[int, Field(description="移動タイル数")],
+    capture_redraw_wait_seconds: Annotated[float, Field(description="再描画待機秒")],
+    capture: Annotated[CaptureConfig, Field(description="撮影設定")],
+):
+    if zoom_level not in ['one_eighth', 'quarter', 'half', 'normal', 'double']:
+        raise ValueError(f"Invalid zoom_level value: {zoom_level}")
+    params = CreateTilesParams(
+        folder_path=folder_path,
+        binary_name=binary_name,
+        pakset_name=pakset_name,
+        paksize=paksize,
+        save_data_name=save_data_name,
+        map_size=map_size,
+        zoom_level=zoom_level,
+        tile_size=tile_size,
+        tile_quality_max_zoom=tile_quality_max_zoom,
+        tile_quality_other=tile_quality_other,
+        tile_group_size=tile_group_size,
+        delta=delta,
+        capture_redraw_wait_seconds=capture_redraw_wait_seconds,
+        capture=capture,
+    )
+
     strategy = CaptureStrategy(
-        map_x=MAP_TILES_X,
-        map_y=MAP_TILES_Y,
-        delta=DELTA,
+        map_x=params['map_size']['x'],
+        map_y=params['map_size']['y'],
+        delta=params['delta'],
     )
     areas_groups = strategy.generate_capture_areas_groups()
     areas_to_group = {}
@@ -78,7 +97,10 @@ def create_tiles():
             retries=3,
             retry_delay_seconds=300,
             priority=priority,
-        ).submit(tasks=tasks_in_group)
+        ).submit(
+            params=params,
+            tasks=tasks_in_group,
+        )
     # 撮影には依存関係は不要
     
     print(f"Total capture tasks: {len(capture_tasks)}")
@@ -116,6 +138,7 @@ def create_tiles():
             retry_delay_seconds=300,
             priority=priority,
         ).submit(
+            params=params,
             group=group, # estimate用のグループの情報をそのまま渡す
             capture_results=needed_capture_tasks,
             estimate_results=needed_estimate_tasks,
@@ -124,13 +147,14 @@ def create_tiles():
     print(f"Total estimate tasks: {len(estimate_tasks)}")
 
     # ---------- 最大ズームタイル切り出しタスク ----------
-    # タイル数が多いので、TILE_GROUP_SIZE x TILE_GROUP_SIZEごとにまとめて処理する
+    # タイル数が多いので、tile_group_size x tile_group_sizeごとにまとめて処理する
 
     # タイルの総数
-    total_tiles_per_axis = 2 ** MAX_Z
+    max_z = params.max_z()
+    total_tiles_per_axis = 2 ** max_z
     
     # マップが極端に小さい場合、グループサイズを調整
-    actual_group_size = min(TILE_GROUP_SIZE, total_tiles_per_axis)
+    actiual_group_size = min(params['tile_group_size'], total_tiles_per_axis)
 
     # 各エリアのカバー範囲を事前計算
     print("Calculating area coverage...")
@@ -138,14 +162,14 @@ def create_tiles():
     for group in areas_groups:
         for area in group:
             # areaのx, y座標はゲーム内タイル座標
-            screen_coord = game_tile_to_screen_lefttop_coord(area['x'], area['y'])
+            screen_coord = game_tile_to_screen_lefttop_coord(params, area['x'], area['y'])
             screen_x = screen_coord[0]
             screen_y = screen_coord[1]
             # 念の為もうちょっと余裕を持たせてキャプチャ範囲を計算
-            capture_x_min = screen_x - IMAGE_MARGIN_WIDTH
-            capture_y_min = screen_y - IMAGE_MARGIN_HEIGHT
-            capture_x_max = screen_x + IMAGE_WIDTH + IMAGE_MARGIN_WIDTH
-            capture_y_max = screen_y + IMAGE_HEIGHT + IMAGE_MARGIN_HEIGHT
+            capture_x_min = screen_x - params['capture']['margin_width']
+            capture_y_min = screen_y - params['capture']['margin_height']
+            capture_x_max = screen_x + params.image_width() + params['capture']['margin_width']
+            capture_y_max = screen_y + params.image_height() + params['capture']['margin_height']
             
             # スクショの4つの角のスクショ座標系での位置を計算
             corners_in_screen_coords = [
@@ -157,7 +181,7 @@ def create_tiles():
 
             # 4つの角をすべてタイル座標に変換
             corners_in_tile_coords = [
-                screen_coord_to_map_tile(sx, sy, MAX_Z)
+                screen_coord_to_map_tile(params, sx, sy, max_z)
                 for sx, sy in corners_in_screen_coords
             ]
             
@@ -193,9 +217,9 @@ def create_tiles():
     # 各ズームレベルで存在するグループを計算
     print("Calculating existing groups for each zoom level...")
     existing_groups = {}
-    existing_groups[MAX_Z] = set(group_to_areas.keys())
+    existing_groups[max_z] = set(group_to_areas.keys())
     
-    for z in range(MAX_Z - 1, -1, -1):
+    for z in range(max_z - 1, -1, -1):
         existing_groups[z] = set()
         for (cgx, cgy) in existing_groups[z + 1]:
             # 子グループのタイル範囲 → 親タイル範囲
@@ -218,7 +242,7 @@ def create_tiles():
     # グループ化してタイル切り出しタスクを生成
     print("Creating tile cut tasks...")
     tile_cut_tasks = {}
-    for (gx, gy) in existing_groups[MAX_Z]:
+    for (gx, gy) in existing_groups[max_z]:
         area_coords_set = group_to_areas[(gx, gy)]
         # capture_gとestimate_gの結果をtile_cut_gの外で分解することはできないので、関数に渡してから分解する必要がある
         # なので、具体的なtile_cut関数の引数の組み立てはtile_cut_gで行う
@@ -243,12 +267,13 @@ def create_tiles():
         needed_capture_tasks = list(set(needed_capture_tasks))
         needed_estimate_tasks = list(set(needed_estimate_tasks))
 
-        task_id = f"tile_cut_g_z{MAX_Z}_gx{gx}_gy{gy}"
+        task_id = f"tile_cut_g_z{max_z}_gx{gx}_gy{gy}"
         tile_cut_tasks[task_id] = tile_cut_g.with_options(
             name=task_id,
             retries=3,
             retry_delay_seconds=300,
         ).submit(
+            params=params,
             gx=gx,
             gy=gy,
             related_areas=related_areas,
@@ -261,7 +286,7 @@ def create_tiles():
     # ---------- タイルマージタスク ----------
     print("Creating tile merge tasks...")
     tile_merge_tasks = {}
-    for z in range(MAX_Z - 1, -1, -1):
+    for z in range(max_z - 1, -1, -1):
         for (gx, gy) in existing_groups[z]:
             child_results = []
             child_z = z + 1
@@ -275,7 +300,7 @@ def create_tiles():
             ]
             
             for (cgx, cgy) in child_coords:
-                if child_z == MAX_Z:
+                if child_z == max_z:
                     child_task_id = f"tile_cut_g_z{child_z}_gx{cgx}_gy{cgy}"
                     if child_task_id in tile_cut_tasks:
                         child_results.append(tile_cut_tasks[child_task_id])
@@ -294,6 +319,7 @@ def create_tiles():
                 retries=3,
                 retry_delay_seconds=300,
             ).submit(
+                params=params,
                 z=z,
                 gx=gx,
                 gy=gy,
@@ -306,27 +332,28 @@ def create_tiles():
     print("Creating tile compress tasks...")
     tile_compress_tasks = {}
     
-    # z=MAX_Zはtile_cut_gから
-    for (gx, gy) in existing_groups[MAX_Z]:
-        task_id = f"tile_cut_g_z{MAX_Z}_gx{gx}_gy{gy}"
+    # z=max_zはtile_cut_gから
+    for (gx, gy) in existing_groups[max_z]:
+        task_id = f"tile_cut_g_z{max_z}_gx{gx}_gy{gy}"
         if task_id not in tile_cut_tasks:
             continue
         
-        compress_task_id = f"tile_compress_g_z{MAX_Z}_gx{gx}_gy{gy}"
+        compress_task_id = f"tile_compress_g_z{max_z}_gx{gx}_gy{gy}"
         tile_compress_tasks[compress_task_id] = tile_compress_g.with_options(
             name=compress_task_id,
             retries=3,
             retry_delay_seconds=300,
         ).submit(
-            z=MAX_Z,
+            params=params,
+            z=max_z,
             gx=gx,
             gy=gy,
             tile_results=tile_cut_tasks[task_id],
-            quality=TILE_QUALITY_MAX_ZOOM,
+            quality=params['tile_quality_max_zoom'],
         )
     
-    # z=MAX_Z-1〜0はtile_merge_gから
-    for z in range(MAX_Z - 1, -1, -1):
+    # z=max_z-1〜0はtile_merge_gから
+    for z in range(max_z - 1, -1, -1):
         for (gx, gy) in existing_groups[z]:
             task_id = f"tile_merge_g_z{z}_gx{gx}_gy{gy}"
             if task_id not in tile_merge_tasks:
@@ -338,11 +365,12 @@ def create_tiles():
                 retries=3,
                 retry_delay_seconds=300,
             ).submit(
+                params=params,
                 z=z,
                 gx=gx,
                 gy=gy,
                 tile_results=tile_merge_tasks[task_id],
-                quality=TILE_QUALITY_OTHER,
+                quality=params['tile_quality_other'],
             )
 
     # ---------- 一枚絵生成タスク ----------
@@ -359,12 +387,12 @@ def create_tiles():
     create_panel_tasks = {}
     for res in resolutions:
         # 解像度を満たすのに必要なzoomレベルを計算
-        scale_x = res['width'] / TILE_SIZE # 横方向に必要なタイル数
-        scale_y = res['height'] / TILE_SIZE # 縦方向に必要なタイル数
+        scale_x = res['width'] / params['tile_size'] # 横方向に必要なタイル数
+        scale_y = res['height'] / params['tile_size'] # 縦方向に必要なタイル数
         scale = max(scale_x, scale_y)
         z_plus = math.log2(scale) # scaleで倍率が上がるので、その分を補正
         z = min(
-            MAX_Z,
+            max_z,
             max(0, int(math.ceil(math.log2(scale) + z_plus)))
         )
         print(f"Resolution {res['id']} ({res['width']}x{res['height']}) requires zoom level {z}")
@@ -373,9 +401,9 @@ def create_tiles():
         for (gx, gy) in existing_groups[z]:
             tile_cut_task_id = f"tile_cut_g_z{z}_gx{gx}_gy{gy}"
             tile_merge_task_id = f"tile_merge_g_z{z}_gx{gx}_gy{gy}"
-            if z == MAX_Z and tile_cut_task_id in tile_cut_tasks:
+            if z == max_z and tile_cut_task_id in tile_cut_tasks:
                 needed_tile_cut_merge_tasks.append(tile_cut_tasks[tile_cut_task_id])
-            elif z < MAX_Z and tile_merge_task_id in tile_merge_tasks:
+            elif z < max_z and tile_merge_task_id in tile_merge_tasks:
                 needed_tile_cut_merge_tasks.append(tile_merge_tasks[tile_merge_task_id])
         task_id = f"panel_{res['id']}"
         create_panel_tasks[task_id] = create_panel.with_options(
@@ -383,6 +411,7 @@ def create_tiles():
             retries=3,
             retry_delay_seconds=300,
         ).submit(
+            params=params,
             z=z,
             resolution=res,
             tile_results=needed_tile_cut_merge_tasks,

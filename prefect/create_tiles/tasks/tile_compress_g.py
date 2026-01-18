@@ -1,10 +1,11 @@
 import requests
 from create_tiles.priority_task import priority_task
-from create_tiles.config import SERVICE_TILE_COMPRESS_URL, TILE_GROUP_SIZE
+from create_tiles.config import SERVICE_TILE_COMPRESS_URL
 from create_tiles.utils import parse_zxy_str, check_exists, log
+from create_tiles.flow_params import CreateTilesParams
 
 @priority_task(task_type="tile_compress", retries=3, retry_delay_seconds=300)
-def tile_compress_g(z: int, gx: int, gy: int, tile_results: dict, quality: str):
+def tile_compress_g(params: CreateTilesParams, z: int, gx: int, gy: int, tile_results: dict, quality: str):
     log(f"Processing tile compress group at z={z}, ({gx}, {gy}) with {len(tile_results)} tiles")
     
     for key, input_path in tile_results.items():
@@ -14,12 +15,17 @@ def tile_compress_g(z: int, gx: int, gy: int, tile_results: dict, quality: str):
         if check_exists(output_path):
             log(f"  Output already exists at {output_path}, skipping compression.")
             continue
-        tile_compress(input_path, output_path, quality)
+        tile_compress(
+            params,
+            input_path,
+            output_path,
+            quality,
+        )
     
     log(f"Compression complete for {len(tile_results)} tiles")
     return True
 
-def tile_compress(input_path: str, output_path: str, quality: str):
+def tile_compress(params: CreateTilesParams, input_path: str, output_path: str, quality: str):
     url = f"{SERVICE_TILE_COMPRESS_URL}/compress"
     payload = {
         "input_path": input_path,

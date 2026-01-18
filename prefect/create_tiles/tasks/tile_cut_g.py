@@ -1,20 +1,11 @@
 import requests
 from create_tiles.priority_task import priority_task
-from create_tiles.config import (
-    SERVICE_TILE_CUT_URL,
-    TILE_SIZE,
-    MAX_Z,
-    TILE_GROUP_SIZE,
-    IMAGE_WIDTH,
-    IMAGE_HEIGHT,
-    IMAGE_MARGIN_WIDTH,
-    IMAGE_MARGIN_HEIGHT,
-    SAVE_DATA_NAME,
-)
+from create_tiles.config import (SERVICE_TILE_CUT_URL)
 from create_tiles.utils import map_tile_to_screen_coord, parse_xy_str, check_exists, log
+from create_tiles.flow_params import CreateTilesParams
 
 @priority_task(task_type="tile_cut", retries=3, retry_delay_seconds=300)
-def tile_cut_g(gx: int, gy: int, related_areas: list, capture_results: list, estimate_results: list):
+def tile_cut_g(params: CreateTilesParams, gx: int, gy: int, related_areas: list, capture_results: list, estimate_results: list):
     log(f"Processing tile cut group at ({gx}, {gy}) with {len(related_areas)} related areas")
     for area in related_areas:
         log(f"  Related area: x{area['x']}, y{area['y']}")
@@ -55,19 +46,21 @@ def tile_cut_g(gx: int, gy: int, related_areas: list, capture_results: list, est
         area_screen_ranges.append({
             'x': ax,
             'y': ay,
-            'screen_x_min': screen_x - IMAGE_MARGIN_WIDTH,
-            'screen_y_min': screen_y - IMAGE_MARGIN_HEIGHT,
-            'screen_x_max': screen_x + IMAGE_WIDTH + IMAGE_MARGIN_WIDTH,
-            'screen_y_max': screen_y + IMAGE_HEIGHT + IMAGE_MARGIN_HEIGHT,
+            'screen_x_min': screen_x - params['capture']['margin_width'],
+            'screen_y_min': screen_y - params['capture']['margin_height'],
+            'screen_x_max': screen_x + params.image_width + params['capture']['margin_width'],
+            'screen_y_max': screen_y + params.image_height + params['capture']['margin_height'],
         })
 
     # グループ内の各タイルを処理
     cut_tiles = {}
-    for tx in range(gx, gx + TILE_GROUP_SIZE):
-        for ty in range(gy, gy + TILE_GROUP_SIZE):
+    tile_group_size = params['tile_group_size']
+    max_z = params.max_z()
+    for tx in range(gx, gx + tile_group_size):
+        for ty in range(gy, gy + tile_group_size):
             # このタイルのスクリーン座標範囲を計算
-            tile_screen_min = map_tile_to_screen_coord(tx, ty, MAX_Z)
-            tile_screen_max = map_tile_to_screen_coord(tx + 1, ty + 1, MAX_Z)
+            tile_screen_min = map_tile_to_screen_coord(params, tx, ty, max_z)
+            tile_screen_max = map_tile_to_screen_coord(params, tx + 1, ty + 1, max_z)
             tile_x_min = tile_screen_min[0]
             tile_y_min = tile_screen_min[1]
             tile_x_max = tile_screen_max[0]
@@ -93,24 +86,25 @@ def tile_cut_g(gx: int, gy: int, related_areas: list, capture_results: list, est
             if not images:
                 continue
             
-            output_path = f"/images/rawtiles/{SAVE_DATA_NAME}/{MAX_Z}/{tx}/{ty}.png"
+            output_path = f"/images/rawtiles/{params['save_data_name']}/{max_z}/{tx}/{ty}.png"
             if check_exists(output_path):
                 log(f"  Output already exists at {output_path}, skipping tile cut.")
-                cut_tiles[f"z{MAX_Z}_x{tx}_y{ty}"] = output_path
+                cut_tiles[f"z{max_z}_x{tx}_y{ty}"] = output_path
                 continue
             tile_cut(
+                params=params,
                 x=tx,
                 y=ty,
                 images=images,
                 output_path=output_path
             )
-            cut_tiles[f"z{MAX_Z}_x{tx}_y{ty}"] = output_path
+            cut_tiles[f"z{max_z}_x{tx}_y{ty}"] = output_path
 
     return cut_tiles
 
-def tile_cut(x: int, y: int, images: list, output_path: str):
+def tile_cut(params: CreateTilesParams, x: int, y: int, images: list, output_path: str):
     url = f"{SERVICE_TILE_CUT_URL}/cut"
-    cut_area = map_tile_to_screen_coord(x, y, MAX_Z)
+    cut_area = map_tile_to_screen_coord(params, x, y, max_z)
     payload = {
         "images": [
             {

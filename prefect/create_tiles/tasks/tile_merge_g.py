@@ -1,10 +1,11 @@
 import requests
 from create_tiles.priority_task import priority_task
-from create_tiles.config import SERVICE_TILE_MERGE_URL, TILE_GROUP_SIZE, SAVE_DATA_NAME
+from create_tiles.config import SERVICE_TILE_MERGE_URL
 from create_tiles.utils import parse_zxy_str, check_exists, log
+from create_tiles.flow_params import CreateTilesParams
 
 @priority_task(task_type="tile_merge", retries=3, retry_delay_seconds=300)
-def tile_merge_g(z: int, gx: int, gy: int, child_results: list):
+def tile_merge_g(params: CreateTilesParams, z: int, gx: int, gy: int, child_results: list):
     log(f"Processing tile merge group at z={z}, ({gx}, {gy}) with {len(child_results)} child results")
     for child_result in child_results:
         log(" Child result:")
@@ -18,8 +19,9 @@ def tile_merge_g(z: int, gx: int, gy: int, child_results: list):
         child_tiles.update(result)
 
     merged_tiles = {}
-    for tx in range(gx, gx + TILE_GROUP_SIZE):
-        for ty in range(gy, gy + TILE_GROUP_SIZE):
+    tile_group_size = params['tile_group_size']
+    for tx in range(gx, gx + tile_group_size):
+        for ty in range(gy, gy + tile_group_size):
             # 子タイルのキーを生成
             child_keys = [
                 f"z{z+1}_x{tx*2}_y{ty*2}",
@@ -40,18 +42,22 @@ def tile_merge_g(z: int, gx: int, gy: int, child_results: list):
             
             # 子タイルが1つ以上あればマージ
             if tiles_to_merge:
-                output_path = f"/images/rawtiles/{SAVE_DATA_NAME}/{z}/{tx}/{ty}.png"
+                output_path = f"/images/rawtiles/{params['save_data_name']}/{z}/{tx}/{ty}.png"
                 if check_exists(output_path):
                     log(f"  Output already exists at {output_path}, skipping merge.")
                     merged_tiles[f"z{z}_x{tx}_y{ty}"] = output_path
                     continue
-                tile_merge(tiles_to_merge, output_path)
+                tile_merge(
+                    params,
+                    tiles_to_merge,
+                    output_path,
+                )
                 merged_tiles[f"z{z}_x{tx}_y{ty}"] = output_path
 
     log(f"Total merged tiles: {len(merged_tiles)}")
     return merged_tiles
 
-def tile_merge(tiles: list, output_path: str):
+def tile_merge(params: CreateTilesParams, tiles: list, output_path: str):
     url = f"{SERVICE_TILE_MERGE_URL}/merge"
     payload = {
         "tiles": [

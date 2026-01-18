@@ -97,8 +97,7 @@ class AdminApp < Sinatra::Base
 
     # バリデーション
     required_fields = %w[
-      folder_path binary_name pakset_name paksize save_data_name
-      zoom_level adjusted_paksize tile_size
+      folder_path binary_name pakset_name paksize save_data_name zoom_level
       tile_quality_max_zoom tile_quality_other tile_group_size delta
       capture_redraw_wait_seconds
     ]
@@ -116,8 +115,8 @@ class AdminApp < Sinatra::Base
       pakset: request_body['pakset_name'],
       paksize: request_body['paksize'],
       save_data: request_body['save_data_name'],
-      map_size_width: request_body.dig('map_size', 'width') || 0,
-      map_size_height: request_body.dig('map_size', 'height') || 0,
+      map_size_x: request_body.dig('map_size', 'x') || 0,
+      map_size_y: request_body.dig('map_size', 'y') || 0,
       zoom_level: request_body['zoom_level'],
       status: 'processing'
     )

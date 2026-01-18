@@ -28,10 +28,10 @@ CREATE TABLE maps (
     paksize INTEGER NOT NULL
         CHECK (paksize > 0),
     save_data TEXT NOT NULL,
-    map_size_width INTEGER NOT NULL
-        CHECK (map_size_width > 0),
-    map_size_height INTEGER NOT NULL
-        CHECK (map_size_height > 0),
+    map_size_x INTEGER NOT NULL
+        CHECK (map_size_x > 0),
+    map_size_y INTEGER NOT NULL
+        CHECK (map_size_y > 0),
     zoom_level zoom_level NOT NULL,
     -- マップを生成し終わって後悔した日時(nullable)
     published_at TIMESTAMP WITH TIME ZONE NULL,

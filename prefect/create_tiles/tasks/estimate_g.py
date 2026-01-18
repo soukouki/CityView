@@ -2,9 +2,10 @@ import requests
 from create_tiles.priority_task import priority_task
 from create_tiles.config import SERVICE_ESTIMATE_URL
 from create_tiles.utils import game_tile_to_screen_lefttop_coord, parse_xy_str, log
+from create_tiles.flow_params import CreateTilesParams
 
 @priority_task(task_type="estimate", retries=3, retry_delay_seconds=300)
-def estimate_g(group: list, capture_results: list, estimate_results: list):
+def estimate_g(params: CreateTilesParams, group: list, capture_results: list, estimate_results: list):
     # どんなデータが来るか確認するためのデバッグ出力
     log("Estimating group")
     log(f"Group has {len(group)} areas")
@@ -41,7 +42,7 @@ def estimate_g(group: list, capture_results: list, estimate_results: list):
     for area in group:
         log(f"Estimating coords for x:{area['x']}, y:{area['y']}")
         image_path = capture_dict[(area['x'], area['y'])]
-        hint_coord = game_tile_to_screen_lefttop_coord(area['x'], area['y'])
+        hint_coord = game_tile_to_screen_lefttop_coord(params, area['x'], area['y'])
         adjustment_images = []
         for comp in area['compare']:
             adj_image_path = capture_dict[(comp['x'], comp['y'])]
@@ -52,6 +53,7 @@ def estimate_g(group: list, capture_results: list, estimate_results: list):
             })
             log(f"  Using adjacent image {adj_image_path} at offset ({adj_coords['x']}, {adj_coords['y']})")
         estimated_coords = estimate(
+            params=params,
             image_path=image_path,
             adjacent_images=adjustment_images,
             hint_x=hint_coord[0],
@@ -62,7 +64,7 @@ def estimate_g(group: list, capture_results: list, estimate_results: list):
 
     return estimated_results
 
-def estimate(image_path: str, adjacent_images: list, hint_x: int, hint_y: int):
+def estimate(params: CreateTilesParams, image_path: str, adjacent_images: list, hint_x: int, hint_y: int):
     url = f"{SERVICE_ESTIMATE_URL}/estimate"
     adjustment_images_info = [
         {

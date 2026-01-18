@@ -24,8 +24,8 @@ module DB
     pakset:,
     paksize:,
     save_data:,
-    map_size_width:,
-    map_size_height:,
+    map_size_x:,
+    map_size_y:,
     zoom_level:,
     status: 'processing'
   )
@@ -37,8 +37,8 @@ module DB
       pakset: pakset,
       paksize: paksize,
       save_data: save_data,
-      map_size_width: map_size_width,
-      map_size_height: map_size_height,
+      map_size_x: map_size_x,
+      map_size_y: map_size_y,
       zoom_level: zoom_level,
       created_at: Time.now
     )

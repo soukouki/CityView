@@ -144,8 +144,8 @@
       "paksize": number,
       "save_data": "string",
       "map_size": {
-        "width": number,
-        "height": number
+        "x": number,
+        "y": number
       },
       "panels": [
         {
@@ -193,8 +193,8 @@
         "paksize": number,
         "save_data": "string",
         "map_size": {
-          "width": number,
-          "height": number
+          "x": number,
+          "y": number
         },
         "panels": [
           {
@@ -276,16 +276,14 @@
     "paksize": number,             // pakサイズ
     "save_data_name": "string",    // 使用するセーブデータ名
     "map_size": {                  // マップサイズ
-      "width": number,             // x方向のマップサイズ(タイル数)
-      "height": number             // y方向のマップサイズ(タイル数)
+      "x": number,             // x方向のマップサイズ(タイル数)
+      "y": number             // y方向のマップサイズ(タイル数)
     },
     "zoom_level": "one_eighth" | "quarter" | "half" | "normal" | "double",
-    "adjusted_paksize": number,    // ズームレベルに応じた調整後pakサイズ
-    "tile_size": number,           // タイルサイズ(px)
     "tile_quality_max_zoom": "lossless" | number, // "lossless"または0〜100の整数
     "tile_quality_other":    "lossless" | number, // "lossless"または0〜100の整数
-    "tile_group_size": number,     // タイルのタスク処理をグルーピングする際の縦横ｔイル数(なので、1グループあたりのタイル数の最大値はその2乗)
-    "delta": number,               // スクリーンショット間の移動タイル数((0,0)->(delta/2, delta/2)という感じで移動する)
+    "tile_group_size": number,     // タイルのタスク処理をグルーピングする際の縦横タイル数(なので、1グループあたりのタイル数の最大値はその2乗)
+    "delta": number,               // スクリーンショット間の移動タイル数((0,0)->(delta/2, delta/2)->(delta, 0)という感じで移動する)
     "capture_redraw_wait_seconds": number, // スクリーンショット撮影前の描画待ち時間
     "capture": {
       "crop_offset_x": number,     // 撮影時の左右クロップ幅(px)
@@ -294,10 +292,6 @@
       "margin_height": number,     // 画像の上下のりしろ高さ(px)
       "effective_width": number,   // 画像ののりしろを除いた有効幅(px)
       "effective_height": number,  // 画像ののりしろを除いた有効高さ(px)
-      "image_width": number,       // 画像の横幅(px)
-      "image_height": number,      // 画像の縦幅(px)
-      "capture_width": number,     // 撮影時の横幅(px)
-      "capture_height": number,    // 撮影時の縦幅(px)
     }
   }
   ```

@@ -5,19 +5,6 @@ module Helpers
   # パラメータ計算
   # ========================================
 
-  ZOOM_LEVEL_MULTIPLIERS = {
-    'one_eighth' => 0.125,
-    'quarter' => 0.25,
-    'half' => 0.5,
-    'normal' => 1.0,
-    'double' => 2.0
-  }
-
-  def self.calculate_adjusted_paksize(paksize, zoom_level)
-    multiplier = ZOOM_LEVEL_MULTIPLIERS[zoom_level] || 1.0
-    (paksize * multiplier).to_i
-  end
-
   def self.calculate_capture_params
     {
       crop_offset_x: ENV['CROP_OFFSET_X'].to_i,
