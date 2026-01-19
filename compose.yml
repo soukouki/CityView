@@ -123,6 +123,7 @@ services:
       BACKEND_INTERNAL_URL: http://backend:8002
       STORAGE_URL: http://storage
       TZ: ${TZ:-Asia/Tokyo}
+      TILE_SIZE: ${TILE_SIZE}
     volumes:
       - ./prefect:/opt/prefect/flows:ro
     depends_on:
@@ -204,6 +205,7 @@ services:
     build: ./service-tile-cut
     environment:
       STORAGE_URL: http://storage
+      TILE_SIZE: ${TILE_SIZE}
     deploy:
       replicas: 4
     restart: unless-stopped
@@ -212,6 +214,7 @@ services:
     build: ./service-tile-merge
     environment:
       STORAGE_URL: http://storage
+      TILE_SIZE: ${TILE_SIZE}
     deploy:
       replicas: 2
     restart: unless-stopped
@@ -228,6 +231,7 @@ services:
     build: ./service-create-panel
     environment:
       STORAGE_URL: http://storage
+      TILE_SIZE: ${TILE_SIZE}
     deploy:
       replicas: 1
     restart: unless-stopped

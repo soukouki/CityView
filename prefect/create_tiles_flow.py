@@ -10,6 +10,7 @@ from create_tiles.utils import (
     game_tile_to_screen_lefttop_coord,
     screen_coord_to_map_tile,
 )
+from create_tiles.config import TILE_SIZE
 from create_tiles.tasks.capture_g import capture_g
 from create_tiles.tasks.estimate_g import estimate_g
 from create_tiles.tasks.tile_cut_g import tile_cut_g
@@ -40,7 +41,6 @@ def create_tiles(
     save_data_name: Annotated[str, Field(description="セーブデータ名")],
     map_size: Annotated[MapSize, Field(description="マップサイズ")],
     zoom_level: Annotated[ZoomLevel, Field(description="ズームレベル")],
-    tile_size: Annotated[int, Field(description="地図タイルの解像度(px)")],
     tile_quality_max_zoom: Annotated[TileQuality, Field(description="最大ズーム時の画質")],
     tile_quality_other: Annotated[TileQuality, Field(description="通常時の画質")],
     tile_group_size: Annotated[int, Field(description="タイルグループサイズ")],
@@ -58,7 +58,7 @@ def create_tiles(
         save_data_name=save_data_name,
         map_size=map_size,
         zoom_level=zoom_level,
-        tile_size=tile_size,
+        tile_size=TILE_SIZE,
         tile_quality_max_zoom=tile_quality_max_zoom,
         tile_quality_other=tile_quality_other,
         tile_group_size=tile_group_size,

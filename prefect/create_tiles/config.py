@@ -10,3 +10,6 @@ SERVICE_TILE_COMPRESS_URL = os.environ.get('SERVICE_TILE_COMPRESS_URL', 'http://
 SERVICE_CREATE_PANEL_URL = os.environ.get('SERVICE_CREATE_PANEL_URL', 'http://service-create-panel:5005')
 BACKEND_INTERNAL_URL = os.environ.get('BACKEND_INTERNAL_URL', 'http://backend:8002')
 STORAGE_URL = os.environ.get('STORAGE_URL', 'http://storage')
+
+# 環境変数からの設定
+TILE_SIZE = int(os.environ.get('TILE_SIZE', '512'))
