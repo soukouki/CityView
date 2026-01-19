@@ -131,7 +131,7 @@
 | GET | `/panels/{map_id}/{filename}` | 一枚絵画像配信（storage `/images/panels/` へプロキシ） |
 | GET | `/api/maps` | マップ一覧取得 | - | 下記参照 |
 
-- **`/api/maps` リクエストボディ**
+- **GET `/api/maps` リクエストボディ**
   ```json
   [
     {
@@ -178,7 +178,7 @@
 | POST | `/api/maps` | マップ生成ジョブ作成、Flow起動 | 下記参照 | `{"job_id": "string"}` |
 
 
-- **`/api/status` レスポンスボディ**
+- **GET `/api/status` レスポンスボディ**
   ```json
   {
     // 基本/api/mapsと同じ内容だが、ステータスがprocessingやfailedのものも含む
@@ -229,7 +229,7 @@
   }
   ```
 
-- **`/api/options` レスポンスボディ**
+- **GET `/api/options` レスポンスボディ**
   ```json
   {
     // ゲームが入っているフォルダ(フォルダ内には複数pakset、複数本体がある)
@@ -267,7 +267,7 @@
   }
   ```
 
-- **`api/maps` リクエストボディ**
+- **POST `api/maps` リクエストボディ**
   ```json
   {
     "folder_path": "string",       // ゲームフォルダパス
@@ -369,8 +369,26 @@
 
   | メソッド | パス | 説明 | リクエスト | レスポンス |
   |---|---|---|---|---|
-  | POST | `/capture` | スクリーンショット撮影 | `{"save_data_name": "string", "x": 0, "y": 0, "output_path": "string", "zoom_level": "string"}` | `{"status": "ok"}` |
+  | POST | `/capture` | スクリーンショット撮影 | 下記参照 | `{"status": "ok"}` |
   - `zoom_level` : `"quarter"`, `"half"`, `"normal"`, `"double"`のいずれか
+  - `/capture`のリクエストボディ
+  ```json
+  {
+    "folder_path": "string",
+    "binary_name": "string",
+    "pakset_name": "string",
+    "save_data_name": "string",
+    "zoom_level": "string",
+    "capture_redraw_wait_seconds": number,
+    "capture_width": number,
+    "capture_height": number,
+    "crop_offset_x": number,
+    "crop_offset_y": number,
+    "x": 0,
+    "y": 0,
+    "output_path": "string",
+  }
+  ```
 
 - **レプリカ数**: `2`
 - **処理フロー**:

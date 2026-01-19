@@ -32,11 +32,24 @@ def capture_g(params: CreateTilesParams, tasks: list):
 def capture(params: CreateTilesParams, x: int, y: int, output_path: str):
     url = f"{SERVICE_CAPTURE_URL}/capture"
     payload = {
+        # "save_data_name": params['save_data_name'],
+        # "x": x,
+        # "y": y,
+        # "output_path": output_path,
+        # "zoom_level": params['zoom_level'],
+        "folder_path": params['folder_path'],
+        "binary_name": params['binary_name'],
+        "pakset_name": params['pakset_name'],
         "save_data_name": params['save_data_name'],
+        "zoom_level": params['zoom_level'],
+        "capture_redraw_wait_seconds": params['capture_redraw_wait_seconds'],
+        "capture_width": params['capture'].capture_width(),
+        "capture_height": params['capture'].capture_height(),
+        "crop_offset_x": params['capture']['crop_offset_x'],
+        "crop_offset_y": params['capture']['crop_offset_y'],
         "x": x,
         "y": y,
         "output_path": output_path,
-        "zoom_level": params['zoom_level'],
     }
     response = requests.post(url, json=payload)
     log(f"status code: {response.status_code}")
@@ -45,3 +58,18 @@ def capture(params: CreateTilesParams, x: int, y: int, output_path: str):
     response.raise_for_status()
     data = response.json() # {"status": "success"} を想定
     return output_path
+#   {
+#     "folder_path": "string",
+#     "binary_name": "string",
+#     "pakset_name": "string",
+#     "save_data_name": "string",
+#     "zoom_level": "string",
+#     "capture_redraw_wait_seconds": number,
+#     "capture_width": number,
+#     "capture_height": number,
+#     "crop_offset_x": number,
+#     "crop_offset_y": number,
+#     "x": 0,
+#     "y": 0,
+#     "output_path": "string",
+#   }

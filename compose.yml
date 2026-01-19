@@ -43,6 +43,7 @@ services:
       DATABASE_URL: postgres://postgres@db:5432/app
       PREFECT_API_URL: http://prefect-server:4200/api
       STORAGE_URL: http://storage
+      TZ: ${TZ:-Asia/Tokyo}
       SIMUTRANS_EXECUTABLE: ${SIMUTRANS_EXECUTABLE}
       PAKSET_NAME: ${PAKSET_NAME}
       PAKSIZE: ${PAKSIZE}
@@ -122,22 +123,6 @@ services:
       BACKEND_INTERNAL_URL: http://backend:8002
       STORAGE_URL: http://storage
       TZ: ${TZ:-Asia/Tokyo}
-      ADJUSTED_PAKSIZE: ${ADJUSTED_PAKSIZE}
-      TILE_SIZE: ${TILE_SIZE}
-      DELTA: ${DELTA}
-      MAP_TILES_X: ${MAP_TILES_X}
-      MAP_TILES_Y: ${MAP_TILES_Y}
-      IMAGE_WIDTH: ${IMAGE_WIDTH}
-      IMAGE_HEIGHT: ${IMAGE_HEIGHT}
-      IMAGE_MARGIN_WIDTH: ${IMAGE_MARGIN_WIDTH}
-      IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
-      IMAGE_EFFECTIVE_WIDTH: ${IMAGE_EFFECTIVE_WIDTH}
-      IMAGE_EFFECTIVE_HEIGHT: ${IMAGE_EFFECTIVE_HEIGHT}
-      TILE_QUALITY_MAX_ZOOM: ${TILE_QUALITY_MAX_ZOOM}
-      TILE_QUALITY_OTHER: ${TILE_QUALITY_OTHER}
-      ZOOM_LEVEL: ${ZOOM_LEVEL}
-      TILE_GROUP_SIZE: ${TILE_GROUP_SIZE}
-      SAVE_DATA_NAME: ${SAVE_DATA_NAME}
     volumes:
       - ./prefect:/opt/prefect/flows:ro
     depends_on:
@@ -181,15 +166,6 @@ services:
     build: ./service-capture
     environment:
       STORAGE_URL: http://storage
-      SIMUTRANS_EXECUTABLE: ${SIMUTRANS_EXECUTABLE}
-      PAKSET_NAME: ${PAKSET_NAME}
-      CAPTURE_SCREEN_WIDTH: ${CAPTURE_WIDTH}
-      CAPTURE_SCREEN_HEIGHT: ${CAPTURE_HEIGHT}
-      CAPTURE_CROP_WIDTH: ${IMAGE_WIDTH}
-      CAPTURE_CROP_HEIGHT: ${IMAGE_HEIGHT}
-      CAPTURE_CROP_OFFSET_X: ${CROP_OFFSET_X}
-      CAPTURE_CROP_OFFSET_Y: ${CROP_OFFSET_Y}
-      CAPTURE_REDRAW_WAIT_SECONDS: ${CAPTURE_REDRAW_WAIT_SECONDS}
       CAPTURE_SCROT_SETTLE_SECONDS: 0.1 # scrotがフレームバッファを読み込むまでの待機時間
       CAPTURE_SCROT_TIMEOUT_SECONDS: 30
       CAPTURE_CROP_TIMEOUT_SECONDS: 30
@@ -215,10 +191,6 @@ services:
     build: ./service-estimate
     environment:
       STORAGE_URL: http://storage
-      IMAGE_MARGIN_WIDTH: ${IMAGE_MARGIN_WIDTH}
-      IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
-      IMAGE_WIDTH: ${IMAGE_WIDTH}
-      IMAGE_HEIGHT: ${IMAGE_HEIGHT}
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:5001/health"]
       interval: 30s
@@ -232,7 +204,6 @@ services:
     build: ./service-tile-cut
     environment:
       STORAGE_URL: http://storage
-      TILE_SIZE: ${TILE_SIZE}
     deploy:
       replicas: 4
     restart: unless-stopped
@@ -241,7 +212,6 @@ services:
     build: ./service-tile-merge
     environment:
       STORAGE_URL: http://storage
-      TILE_SIZE: ${TILE_SIZE}
     deploy:
       replicas: 2
     restart: unless-stopped
@@ -258,7 +228,6 @@ services:
     build: ./service-create-panel
     environment:
       STORAGE_URL: http://storage
-      TILE_SIZE: ${TILE_SIZE}
     deploy:
       replicas: 1
     restart: unless-stopped

@@ -38,8 +38,8 @@ module ServiceCapture
     end
 
     def hide_cursor(map_x:, map_y:)
-      # Move cursor to top-left margin to avoid appearing in crop (crop offset y=64, x=256)
-      # Move down-right position if now x/y is top-left otherwise move top-left => やっぱ動かないのでやめてみる
+      # Move cursor to top-left margin to avoid appearing in crop
+      # Fixed position outside typical crop area
       mousemove(10, 120)
     end
 
@@ -60,14 +60,14 @@ module ServiceCapture
 
     def zoom_in
       # 画面の中央にマウスを移動してPage_Up
-      mousemove(@screen_width / 2, @screen_height / 2)
+      mousemove_to_center()
       sleep 0.05
       key("Page_Up")
     end
 
     def zoom_out
       # 画面の中央にマウスを移動してPage_Down
-      mousemove(@screen_width / 2, @screen_height / 2)
+      mousemove_to_center()
       sleep 0.05
       key("Page_Down")
     end

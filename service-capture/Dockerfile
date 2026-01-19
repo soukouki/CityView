@@ -11,7 +11,7 @@ WORKDIR /app
 # - imagemagick: pixel check / cropping backend for MiniMagick
 # - curl: debug / health checks
 # - tini: proper PID 1 reaping
-# - libminiupnpc-dev: Simutrans
+# - x11-utils: xdpyinfo for Xvfb readiness check
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       ruby-full \
@@ -23,6 +23,7 @@ RUN apt-get update && \
       ca-certificates \
       curl \
       tini \
+      x11-utils \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Simutrans deps:
@@ -69,6 +70,6 @@ ENV RACK_ENV=production \
 
 EXPOSE 5000
 
-# Use tini as PID1; start Xvfb then Puma.
+# Use tini as PID1; start Puma only (Xvfb is managed by GameProcessManager)
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["bash", "-lc", "Xvfb ${DISPLAY} -screen 0 ${CAPTURE_SCREEN_WIDTH}x${CAPTURE_SCREEN_HEIGHT}x24 -ac +extension GLX +render -noreset & bundle exec puma -C config/puma.rb"]
+CMD ["bundle", "exec", "puma", "-C", "config/puma.rb"]

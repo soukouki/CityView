@@ -6,10 +6,10 @@ require "sinatra/base"
 require "sinatra/json"
 require "concurrent"
 
+require_relative "lib/capture_config"
 require_relative "lib/game_process_manager"
 require_relative "lib/screenshot_service"
 require_relative "lib/storage_client"
-require_relative "lib/x11_controller"
 require_relative "lib/image_processor"
 
 module ServiceCapture
@@ -47,24 +47,13 @@ module ServiceCapture
       base_url: ENV.fetch("STORAGE_URL", "http://storage"),
     )
 
-    X11_CONTROLLER = ServiceCapture::X11Controller.new(
-      screen_width: ENV.fetch("CAPTURE_SCREEN_WIDTH").to_i,
-      screen_height: ENV.fetch("CAPTURE_SCREEN_HEIGHT").to_i,
-    )
-
     GAME_MANAGER = ServiceCapture::GameProcessManager.new(
-      executable: ENV.fetch("SIMUTRANS_EXECUTABLE", "simutrans-extended"),
-      executable_dir: "/app/bin",
-      pakset_name: ENV.fetch("PAKSET_NAME"),
       display: ENV.fetch("DISPLAY", ":99"),
-      screen_width: ENV.fetch("CAPTURE_SCREEN_WIDTH").to_i,
-      screen_height: ENV.fetch("CAPTURE_SCREEN_HEIGHT").to_i,
       ttl_seconds: ENV.fetch("CAPTURE_TTL_SECONDS", "600").to_i,
       boot_timeout_seconds: ENV.fetch("GAME_BOOT_TIMEOUT_SECONDS", "180").to_i,
       boot_poll_interval_seconds: ENV.fetch("GAME_BOOT_POLL_INTERVAL_SECONDS", "2").to_i,
       boot_check_x: ENV.fetch("GAME_BOOT_CHECK_X", "256").to_i,
       boot_check_y: ENV.fetch("GAME_BOOT_CHECK_Y", "256").to_i,
-      x11_controller: X11_CONTROLLER,
     )
 
     # Worker pool for parallel screenshot processing
@@ -74,18 +63,13 @@ module ServiceCapture
 
     SCREENSHOT = ServiceCapture::ScreenshotService.new(
       storage_client: STORAGE,
-      crop_width: ENV.fetch("CAPTURE_CROP_WIDTH").to_i,
-      crop_height: ENV.fetch("CAPTURE_CROP_HEIGHT").to_i,
-      crop_offset_x: ENV.fetch("CAPTURE_CROP_OFFSET_X", "256").to_i,
-      crop_offset_y: ENV.fetch("CAPTURE_CROP_OFFSET_Y", "64").to_i,
-      x11_controller: X11_CONTROLLER,
       worker_pool: WORKER_POOL,
       capture_lock: CAPTURE_LOCK,
-      redraw_wait: ENV.fetch("CAPTURE_REDRAW_WAIT_SECONDS", "0.2").to_f,
       scrot_settle: ENV.fetch("CAPTURE_SCROT_SETTLE_SECONDS", "0.3").to_f,
       scrot_timeout: ENV.fetch("CAPTURE_SCROT_TIMEOUT_SECONDS", "30").to_i,
       crop_timeout: ENV.fetch("CAPTURE_CROP_TIMEOUT_SECONDS", "30").to_i,
       upload_timeout: ENV.fetch("CAPTURE_UPLOAD_TIMEOUT_SECONDS", "30").to_i,
+      game_manager: GAME_MANAGER,
     )
 
     # TTL watcher (best-effort)
@@ -101,52 +85,63 @@ module ServiceCapture
     end
 
     # POST /capture
-    # request: { "save_data_name": "...", "x": 0, "y": 0, "output_path": "...", "zoom_level": "..." }
-    # response: { "status": "ok" }
+    # request: {
+    #   "folder_path": "...",
+    #   "binary_name": "...",
+    #   "pakset_name": "...",
+    #   "save_data_name": "...",
+    #   "crop_offset_x": 128,
+    #   "crop_offset_y": 64,
+    #   "margin_width": 160,
+    #   "margin_height": 80,
+    #   "effective_width": 3200,
+    #   "effective_height": 1600,
+    #   "capture_redraw_wait_seconds": 0.2,
+    #   "zoom_level": "normal",
+    #   "x": 0,
+    #   "y": 0,
+    #   "output_path": "..."
+    # }
+    # response: { "status": "success" }
     post "/capture" do
       payload = parse_json_body!
-      require_fields!(payload, :save_data_name, :x, :y, :output_path, :zoom_level)
+      require_fields!(payload,
+        :folder_path, :binary_name, :pakset_name, :save_data_name,
+        :crop_offset_x, :crop_offset_y,
+        :margin_width, :margin_height,
+        :effective_width, :effective_height,
+        :capture_redraw_wait_seconds,
+        :zoom_level, :x, :y, :output_path
+      )
 
-      save_data_name = payload["save_data_name"].to_s
-      if save_data_name.empty?
-        halt 400, json(error: "invalid_save_data_name", message: "save_data_name cannot be empty")
-      end
-      save_dir = File.join("/app/bin", File.dirname(ENV.fetch("SIMUTRANS_EXECUTABLE")), "save")
-      if File.exist?(File.join(save_dir, "#{save_data_name}.sve")) == false
-        halt 400, json(error: "save_data_not_found", message: "save data not found")
-      end
-      x = Integer(payload["x"])
-      if x < 0
-        halt 400, json(error: "invalid_x", message: "x must be non-negative")
-      end
-      y = Integer(payload["y"])
-      if y < 0
-        halt 400, json(error: "invalid_y", message: "y must be non-negative")
-      end
-      output_path = payload["output_path"].to_s
-      if output_path.empty?
-        halt 400, json(error: "invalid_output_path", message: "output_path cannot be empty")
-      end
-      zoom_level = payload["zoom_level"]
-      if !["one_eighth", "quarter", "half", "normal", "double"].include?(zoom_level)
-        halt 400, json(error: "invalid_zoom_level", message: "zoom_level must be one of one_eighth, quarter, half, normal, double")
+      config = ServiceCapture::CaptureConfig.new(payload)
+
+      # Validation
+      unless config.valid?
+        error_msg = config.validation_error
+        halt 400, json(error: "invalid_request", message: error_msg)
       end
 
-      # Ensure game process for this save is running (restart if save differs).
+      # Check executable exists
+      unless File.exist?(config.executable_path)
+        halt 400, json(error: "binary_not_found", message: "binary not found: #{config.executable_path}")
+      end
+
+      # Check save data exists
+      unless File.exist?(config.save_path)
+        halt 400, json(error: "save_data_not_found", message: "save data not found: #{config.save_path}")
+      end
+
+      # Ensure game process for this config is running (restart if config differs).
       CAPTURE_LOCK.synchronize do
-        GAME_MANAGER.ensure_running(save_data_name)
+        GAME_MANAGER.ensure_running(config)
       end
 
       # Screenshot service handles locking internally for optimal parallelization
-      image_path = SCREENSHOT.capture!(
-        output_path:,
-        x:,
-        y:,
-        zoom_level:,
-      )
+      SCREENSHOT.capture!(config)
 
       GAME_MANAGER.touch
-      
+
       json(status: "success")
     rescue ServiceCapture::Errors::BadRequest => e
       warn "[/capture] bad_request msg=#{e.message}"
