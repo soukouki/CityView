@@ -9,16 +9,7 @@ from math import sqrt
 app = Flask(__name__)
 
 # 環境変数から設定を取得
-IMAGE_WIDTH = int(os.getenv('IMAGE_WIDTH'))
-IMAGE_HEIGHT = int(os.getenv('IMAGE_HEIGHT'))
-IMAGE_MARGIN_WIDTH = int(os.getenv('IMAGE_MARGIN_WIDTH'))
-IMAGE_MARGIN_HEIGHT = int(os.getenv('IMAGE_MARGIN_HEIGHT'))
 STORAGE_URL = os.getenv('STORAGE_URL')
-
-# 有効範囲のサイズを計算
-EFFECTIVE_WIDTH = IMAGE_WIDTH - 2 * IMAGE_MARGIN_WIDTH
-EFFECTIVE_HEIGHT = IMAGE_HEIGHT - 2 * IMAGE_MARGIN_HEIGHT
-MARGIN_AVG = (IMAGE_MARGIN_WIDTH + IMAGE_MARGIN_HEIGHT) / 2
 
 # スコアリングパラメータ
 TOP_N_MATCHES = 100
@@ -64,29 +55,30 @@ def calculate_sift_score(match_distance):
     return score
 
 
-def calculate_proximity_score(x, y, hint_x, hint_y):
+def calculate_proximity_score(x, y, hint_x, hint_y, margin_avg):
     """
     ヒント座標との近さをスコア化（線形、0-1）
     
     Args:
         x, y: 推定座標
         hint_x, hint_y: ヒント座標
+        margin_avg: マージンの平均値
     
     Returns:
         スコア（0.0-1.0、近いほど高スコア）、または None（除外対象）
     """
     distance = sqrt((x - hint_x)**2 + (y - hint_y)**2)
     
-    # 距離がMARGIN_AVGの3倍を超えたら除外
-    if distance > PROXIMITY_REJECT_FACTOR * MARGIN_AVG:
+    # 距離がmargin_avgの3倍を超えたら除外
+    if distance > PROXIMITY_REJECT_FACTOR * margin_avg:
         return None
     
     # 線形スコア計算（2倍で0）
-    score = max(0.0, 1.0 - distance / (PROXIMITY_ZERO_FACTOR * MARGIN_AVG))
+    score = max(0.0, 1.0 - distance / (PROXIMITY_ZERO_FACTOR * margin_avg))
     return score
 
 
-def collect_sift_candidates(target_img, ref_img, ref_x, ref_y, hint_x, hint_y, source_id):
+def collect_sift_candidates(target_img, ref_img, ref_x, ref_y, hint_x, hint_y, margin_avg, source_id):
     """
     1つの参照画像からSIFT候補を複数収集
     
@@ -95,6 +87,7 @@ def collect_sift_candidates(target_img, ref_img, ref_x, ref_y, hint_x, hint_y, s
         ref_img: 参照画像
         ref_x, ref_y: 参照画像の座標
         hint_x, hint_y: ヒント座標
+        margin_avg: マージンの平均値
         source_id: デバッグ用の識別子
     
     Returns:
@@ -159,7 +152,7 @@ def collect_sift_candidates(target_img, ref_img, ref_x, ref_y, hint_x, hint_y, s
             
             # 近さスコア計算
             proximity_score = calculate_proximity_score(
-                estimated_x, estimated_y, hint_x, hint_y
+                estimated_x, estimated_y, hint_x, hint_y, margin_avg
             )
             
             # 除外判定
@@ -189,7 +182,8 @@ def collect_sift_candidates(target_img, ref_img, ref_x, ref_y, hint_x, hint_y, s
         return []
 
 
-def estimate_coordinate(target_img, adjacent_images, hint_x, hint_y):
+def estimate_coordinate(target_img, adjacent_images, hint_x, hint_y, 
+                       margin_width, margin_height, effective_width, effective_height):
     """
     座標推定のメイン処理
     
@@ -197,15 +191,21 @@ def estimate_coordinate(target_img, adjacent_images, hint_x, hint_y):
         target_img: 座標未知の画像
         adjacent_images: [(img, x, y), ...] 座標既知の隣接画像リスト
         hint_x, hint_y: ヒント座標
+        margin_width: 画像の左右のりしろ幅(px)
+        margin_height: 画像の上下のりしろ高さ(px)
+        effective_width: 画像ののりしろを除いた有効幅(px)
+        effective_height: 画像ののりしろを除いた有効高さ(px)
     
     Returns:
         推定座標 (x, y)
     """
     img_h, img_w = target_img.shape[:2]
+    margin_avg = (margin_width + margin_height) / 2
+    
     print(f"Target image size: {img_w}x{img_h}", flush=True)
-    print(f"Effective area: {EFFECTIVE_WIDTH}x{EFFECTIVE_HEIGHT}", flush=True)
-    print(f"Margins: {IMAGE_MARGIN_WIDTH}x{IMAGE_MARGIN_HEIGHT}", flush=True)
-    print(f"MARGIN_AVG: {MARGIN_AVG}", flush=True)
+    print(f"Effective area: {effective_width}x{effective_height}", flush=True)
+    print(f"Margins: {margin_width}x{margin_height}", flush=True)
+    print(f"MARGIN_AVG: {margin_avg}", flush=True)
     print(f"Hint coordinates: ({hint_x}, {hint_y})", flush=True)
     
     all_candidates = []
@@ -216,7 +216,7 @@ def estimate_coordinate(target_img, adjacent_images, hint_x, hint_y):
         
         candidates = collect_sift_candidates(
             target_img, ref_img, ref_x, ref_y,
-            hint_x, hint_y, f'ref_{idx}'
+            hint_x, hint_y, margin_avg, f'ref_{idx}'
         )
         
         all_candidates.extend(candidates)
@@ -268,11 +268,36 @@ def estimate():
         
         image_path = data.get('image_path')
         adjacent_images = data.get('adjacent_images', [])
-        hint_x = data.get('hint_x', 0)
-        hint_y = data.get('hint_y', 0)
+        hint_x = data.get('hint_x')
+        hint_y = data.get('hint_y')
+        margin_width = data.get('margin_width')
+        margin_height = data.get('margin_height')
+        effective_width = data.get('effective_width')
+        effective_height = data.get('effective_height')
         
+        # 必須パラメータのチェック
         if not image_path:
             return jsonify({'error': 'image_path is required'}), 400
+        
+        if hint_x is None or hint_y is None:
+            return jsonify({'error': 'hint_x and hint_y are required'}), 400
+        
+        if margin_width is None or margin_height is None:
+            return jsonify({'error': 'margin_width and margin_height are required'}), 400
+        
+        if effective_width is None or effective_height is None:
+            return jsonify({'error': 'effective_width and effective_height are required'}), 400
+        
+        # 数値型の検証
+        try:
+            hint_x = int(hint_x)
+            hint_y = int(hint_y)
+            margin_width = int(margin_width)
+            margin_height = int(margin_height)
+            effective_width = int(effective_width)
+            effective_height = int(effective_height)
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Numeric parameters must be valid numbers'}), 400
         
         print(f"\nProcessing estimation request for: {image_path}", flush=True)
         
@@ -287,7 +312,8 @@ def estimate():
         
         # 座標推定
         estimated_x, estimated_y = estimate_coordinate(
-            target_img, adjacent_data, hint_x, hint_y
+            target_img, adjacent_data, hint_x, hint_y,
+            margin_width, margin_height, effective_width, effective_height
         )
         
         # メモリ解放

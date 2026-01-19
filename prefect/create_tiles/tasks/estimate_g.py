@@ -78,7 +78,11 @@ def estimate(params: CreateTilesParams, image_path: str, adjacent_images: list, 
         "image_path": image_path,
         "adjacent_images": adjustment_images_info,
         "hint_x": hint_x,
-        "hint_y": hint_y
+        "hint_y": hint_y,
+        "margin_width": params['capture']['margin_width'],
+        "margin_height": params['capture']['margin_height'],
+        "effective_width": params['capture']['effective_width'],
+        "effective_height": params['capture']['effective_height'],
     }
     response = requests.post(url, json=payload)
     log(f"status code: {response.status_code}")

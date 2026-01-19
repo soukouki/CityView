@@ -371,7 +371,8 @@
   |---|---|---|---|---|
   | POST | `/capture` | スクリーンショット撮影 | 下記参照 | `{"status": "ok"}` |
   - `zoom_level` : `"quarter"`, `"half"`, `"normal"`, `"double"`のいずれか
-  - `/capture`のリクエストボディ
+
+  - **POST `/capture`のリクエストボディ**
   ```json
   {
     "folder_path": "string",
@@ -418,7 +419,27 @@
 
   | メソッド | パス | 説明 | リクエスト | レスポンス |
   |---|---|---|---|---|
-  | POST | `/estimate` | 座標推定 | `{"image_path": "string", "adjacent_images": [{"image_path": "string", "x": number, "y": number}], "hint_x": number, "hint_y": number}` | `{"estimated_x": 0, "estimated_y": 0}` |
+  | POST | `/estimate` | 座標推定 | 下記参照 | `{"estimated_x": 0, "estimated_y": 0}` |
+
+  - **POST `/estimate`のリクエストボディ**
+  ```json
+  {
+    "image_path": "string",          // 推定対象画像のstorageパス
+    "adjacent_images": [             // 既知座標画像リスト
+      {
+        "image_path": "string",      // 既知座標画像のstorageパス
+        "x": number,                 // 既知座標画像のX座標
+        "y": number                  // 既知座標画像のY座標
+      }
+    ],
+    "hint_x": number,                // 推定対象画像のX座標ヒント
+    "hint_y": number,                // 推定対象画像のY座標ヒント
+    "margin_width": number,          // 画像の左右のりしろ幅(px)
+    "margin_height": number,         // 画像の上下のりしろ高さ(px)
+    "effective_width": number,       // 画像ののりしろを除いた有効幅(px)
+    "effective_height": number       // 画像ののりしろを除いた有効高さ(px)
+  }
+  ```
 
 - **レプリカ数**: `2`
 - **処理フロー**:
