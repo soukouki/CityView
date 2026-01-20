@@ -44,33 +44,41 @@
             display: none;
         }
         
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.95);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-image {
+            max-width: 95vw;
+            max-height: calc(100vh - 80px);
+            object-fit: contain;
+        }
+        
+        .modal-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.8);
+            padding: 12px;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+        }
+        
         @media (max-width: 768px) {
             .controls {
                 top: 6px;
                 right: 6px;
-            }
-            
-            .control-panel {
-                padding: 6px !important;
-                max-width: 160px;
-            }
-            
-            .control-title {
-                font-size: 10px !important;
-            }
-            
-            .control-select {
-                padding: 4px 6px !important;
-                font-size: 11px !important;
-            }
-            
-            .control-info {
-                font-size: 9px !important;
-            }
-            
-            .control-button {
-                padding: 4px 6px !important;
-                font-size: 11px !important;
             }
         }
     </style>
@@ -78,38 +86,90 @@
 <body>
     <div id="app">
         <div class="controls">
-            <div class="control-panel bg-white rounded-lg shadow-lg p-4 space-y-2">
-                <div class="control-title text-sm font-semibold text-gray-700">Save Data</div>
-                <select
-                    v-model="selectedSave"
-                    @change="changeSaveData"
-                    class="control-select w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                    <option value="demo1">demo1</option>
-                    <option value="demo2">demo2</option>
-                    <option value="yokoze-last">yokoze-last</option>
-                    <option value="kumagaya-first">kumagaya-first</option>
-		    <option value="kumagaya-last">kumagaya-last</option>
-                    <option value="npns-e1-1909">npns-e1-1909</option>
-                    <option value="npns-e1-1954">npns-e1-1954</option>
-                    <option value="npns-e1-1982">npns-e1-1982</option>
-                    <option value="npns-e1-2029">npns-e1-2029</option>
-                </select>
-                
-                <div class="pt-2 border-t border-gray-200">
-                    <div class="control-info text-xs text-gray-500">
-                        Tile: {{ tileCoords.x.toFixed(2) }}, {{ tileCoords.y.toFixed(2) }}
-                    </div>
-                    <div class="control-info text-xs text-gray-500">
-                        Zoom: {{ zoom.toFixed(1) }}
-                    </div>
+            <!-- Collapsed: Toggle Button -->
+            <button
+                v-if="!menuOpen"
+                @click="menuOpen = true"
+                class="bg-white rounded-lg shadow-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+                ☰ {{ currentMap ? currentMap.name : 'Menu' }}
+            </button>
+            
+            <!-- Expanded: Panel -->
+            <div v-if="menuOpen" class="bg-white rounded-lg shadow-lg text-sm" style="min-width: 200px; max-width: 260px;">
+                <!-- Header -->
+                <div class="flex items-center justify-between px-3 py-2 border-b border-gray-200">
+                    <span class="font-medium text-gray-700">Menu</span>
+                    <button @click="menuOpen = false" class="text-gray-400 hover:text-gray-600">✕</button>
                 </div>
                 
-                <button
-                    @click="copyShareLink"
-                    class="control-button w-full px-3 py-2 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors"
-                >
-                    {{ shareButtonText }}
+                <div class="p-3 space-y-3">
+                    <!-- Map Selection -->
+                    <select
+                        v-model="selectedMapId"
+                        @change="changeSaveData"
+                        class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        :disabled="maps.length === 0"
+                    >
+                        <option v-if="maps.length === 0" :value="null">Loading...</option>
+                        <option v-for="map in maps" :key="map.map_id" :value="map.map_id">
+                            {{ map.name }}
+                        </option>
+                    </select>
+                    
+                    <!-- Map Info -->
+                    <div v-if="currentMap" class="text-xs text-gray-500 space-y-1">
+                        <div v-if="currentMap.description">{{ currentMap.description }}</div>
+                        <div class="flex justify-between">
+                            <span>Size: {{ currentMap.map_size.x }}×{{ currentMap.map_size.y }}</span>
+                            <span v-if="currentMap.copyright">© {{ currentMap.copyright }}</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Panels -->
+                    <div v-if="currentMap && currentMap.panels && currentMap.panels.length > 0">
+                        <div class="text-xs text-gray-500 mb-1">Panels</div>
+                        <div class="flex flex-wrap gap-1">
+                            <button
+                                v-for="panel in currentMap.panels"
+                                :key="panel.filename"
+                                @click="openModal(panel)"
+                                class="px-2 py-1 bg-gray-100 hover:bg-blue-100 border border-gray-200 hover:border-blue-300 rounded text-xs text-gray-600 hover:text-blue-600"
+                            >
+                                {{ panel.name }}
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Share -->
+                    <button
+                        @click="copyShareLink"
+                        class="w-full px-2 py-1.5 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+                    >
+                        {{ shareButtonText }}
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Modal -->
+        <div v-if="modalOpen" class="modal" @click="closeModal">
+            <img
+                ref="modalImage"
+                :src="modalImageSrc"
+                :alt="modalImageAlt"
+                class="modal-image"
+                @click.stop
+            />
+            <div class="modal-bar" @click.stop>
+                <button @click="fullscreenImage" class="px-3 py-1.5 bg-gray-700 text-white text-sm rounded hover:bg-gray-600">
+                    Fullscreen
+                </button>
+                <button @click="downloadImage" class="px-3 py-1.5 bg-gray-700 text-white text-sm rounded hover:bg-gray-600">
+                    Download
+                </button>
+                <button @click="closeModal" class="px-3 py-1.5 bg-gray-700 text-white text-sm rounded hover:bg-gray-600">
+                    Close
                 </button>
             </div>
         </div>
@@ -124,18 +184,45 @@
             data() {
                 return {
                     map: null,
-                    selectedSave: 'demo1',
+                    maps: [],
+                    selectedMapId: null,
                     coordinates: { lng: 0, lat: 0 },
                     tileCoords: { x: 0.5, y: 0.5 },
                     zoom: 0,
-                    shareButtonText: 'Share'
+                    shareButtonText: 'Share',
+                    menuOpen: false,
+                    modalOpen: false,
+                    modalImageSrc: '',
+                    modalImageAlt: '',
+                    currentPanel: null
                 };
             },
-            mounted() {
+            computed: {
+                currentMap() {
+                    return this.maps.find(m => m.map_id === this.selectedMapId);
+                }
+            },
+            async mounted() {
+                await this.fetchMaps();
                 this.parseUrlParams();
                 this.initMap();
             },
             methods: {
+                async fetchMaps() {
+                    try {
+                        const response = await fetch('/api/maps');
+                        if (!response.ok) throw new Error('Failed to fetch maps');
+                        this.maps = await response.json();
+                        
+                        if (this.maps.length > 0 && this.selectedMapId === null) {
+                            this.selectedMapId = this.maps[0].map_id;
+                        }
+                    } catch (error) {
+                        console.error('Failed to fetch maps:', error);
+                        this.maps = [];
+                    }
+                },
+                
                 lngLatToTile(lng, lat, zoom) {
                     const n = Math.pow(2, zoom);
                     const x = ((lng + 180) / 360) * n;
@@ -154,23 +241,26 @@
                 
                 parseUrlParams() {
                     const params = new URLSearchParams(window.location.search);
-                    const save = params.get('save');
+                    const mapId = params.get('map');
                     const z = params.get('z');
                     const x = params.get('x');
                     const y = params.get('y');
                     
-                    if (save) this.selectedSave = save;
+                    if (mapId) {
+                        const id = parseInt(mapId, 10);
+                        if (this.maps.some(m => m.map_id === id)) {
+                            this.selectedMapId = id;
+                        }
+                    }
                     
                     if (z !== null && x !== null && y !== null) {
                         this.zoom = parseFloat(z);
                         const tileX = parseFloat(x);
                         const tileY = parseFloat(y);
                         this.tileCoords = { x: tileX, y: tileY };
-                        // タイル座標からlng/latに変換
                         const lngLat = this.tileToLngLat(tileX, tileY, this.zoom);
                         this.coordinates = lngLat;
                     } else {
-                        // デフォルト: zoom 0 でタイルの中心 (0.5, 0.5)
                         this.zoom = 0;
                         this.tileCoords = { x: 0.5, y: 0.5 };
                         this.coordinates = { lng: 0, lat: 0 };
@@ -178,6 +268,8 @@
                 },
                 
                 initMap() {
+                    if (this.selectedMapId === null) return;
+                    
                     this.map = new maplibregl.Map({
                         container: 'map',
                         style: {
@@ -186,7 +278,7 @@
                                 'raster-tiles': {
                                     type: 'raster',
                                     tiles: [
-                                        `/tiles/${this.selectedSave}/{z}/{x}/{y}.avif`
+                                        `/tiles/${this.selectedMapId}/{z}/{x}/{y}.avif`
                                     ],
                                     tileSize: 512
                                 }
@@ -244,7 +336,7 @@
                 
                 updateUrl() {
                     const params = new URLSearchParams();
-                    params.set('save', this.selectedSave);
+                    params.set('map', this.selectedMapId);
                     params.set('z', this.zoom.toFixed(2));
                     params.set('x', this.tileCoords.x.toFixed(4));
                     params.set('y', this.tileCoords.y.toFixed(4));
@@ -270,6 +362,34 @@
                         this.shareButtonText = 'Failed';
                         setTimeout(() => { this.shareButtonText = 'Share'; }, 2000);
                     });
+                },
+                
+                openModal(panel) {
+                    this.currentPanel = panel;
+                    this.modalImageSrc = `/panels/${this.selectedMapId}/${panel.filename}`;
+                    this.modalImageAlt = panel.name;
+                    this.modalOpen = true;
+                },
+                
+                closeModal() {
+                    this.modalOpen = false;
+                    this.currentPanel = null;
+                },
+                
+                downloadImage() {
+                    if (!this.currentPanel) return;
+                    const link = document.createElement('a');
+                    link.href = this.modalImageSrc;
+                    link.download = this.currentPanel.filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                },
+                
+                fullscreenImage() {
+                    const img = this.$refs.modalImage;
+                    if (img?.requestFullscreen) img.requestFullscreen();
+                    else if (img?.webkitRequestFullscreen) img.webkitRequestFullscreen();
                 }
             }
         }).mount('#app');
