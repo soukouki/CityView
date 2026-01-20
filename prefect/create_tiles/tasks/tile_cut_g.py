@@ -48,8 +48,8 @@ def tile_cut_g(params: CreateTilesParams, gx: int, gy: int, related_areas: list,
             'y': ay,
             'screen_x_min': screen_x - params.capture.margin_width,
             'screen_y_min': screen_y - params.capture.margin_height,
-            'screen_x_max': screen_x + params.image_width + params.capture.margin_width,
-            'screen_y_max': screen_y + params.image_height + params.capture.margin_height,
+            'screen_x_max': screen_x + params.capture.image_width + params.capture.margin_width,
+            'screen_y_max': screen_y + params.capture.image_height + params.capture.margin_height,
         })
 
     # グループ内の各タイルを処理
@@ -104,7 +104,7 @@ def tile_cut_g(params: CreateTilesParams, gx: int, gy: int, related_areas: list,
 
 def tile_cut(params: CreateTilesParams, x: int, y: int, images: list, output_path: str):
     url = f"{SERVICE_TILE_CUT_URL}/cut"
-    cut_area = map_tile_to_screen_coord(params, x, y, max_z)
+    cut_area = map_tile_to_screen_coord(params, x, y, params.max_z)
     payload = {
         "images": [
             {

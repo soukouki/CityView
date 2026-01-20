@@ -42,7 +42,7 @@ def create_panel(params: CreateTilesParams, z: int, resolution: dict, tile_resul
     # 上端と左端の、最大ズームレベルでの座標をオフセットにする
     up_screen_x, up_screen_y = game_tile_to_screen_coord(params, 0, 0)
     up_map_x, up_map_y = screen_coord_to_map_tile(params, up_screen_x, up_screen_y, z)
-    left_screen_x, left_screen_y = game_tile_to_screen_coord(params, 0, params['map_tiles_y'])
+    left_screen_x, left_screen_y = game_tile_to_screen_coord(params, 0, params.map_size.y)
     left_map_x, left_map_y = screen_coord_to_map_tile(params, left_screen_x, left_screen_y, z)
     tile_size = params.tile_size
     offsets = {

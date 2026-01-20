@@ -1,6 +1,6 @@
 import requests
 from create_tiles.priority_task import priority_task
-from create_tiles.config import SERVICE_ESTIMATE_URL
+from create_tiles.config import SERVICE_ESTIMATE_URL, BACKEND_INTERNAL_URL
 from create_tiles.utils import game_tile_to_screen_lefttop_coord, parse_xy_str, log
 from create_tiles.flow_params import CreateTilesParams
 
@@ -27,11 +27,11 @@ def estimate_g(params: CreateTilesParams, group: list, capture_results: list, es
             log(f"  coords: ({x}, {y}), estimated coords: ({coords['x']}, {coords['y']})")
 
     # capture_resultsとestimate_resultsを辞書に変換しておく
-    capture_dict = {}
+    capture_multi_dict = {}
     for capture_result in capture_results:
         for xy_str, capture_dict in capture_result.items():
             x, y = parse_xy_str(xy_str)
-            capture_dict[(x, y)] = capture_dict
+            capture_multi_dict[(x, y)] = capture_dict
     estimate_dict = {}
     for estimate_result in estimate_results:
         for xy_str, coords in estimate_result.items():
@@ -41,11 +41,11 @@ def estimate_g(params: CreateTilesParams, group: list, capture_results: list, es
     estimated_results = {} # こちらのkeyは "x{X}_y{Y}" の形式にする(XComのため)
     for area in group:
         log(f"Estimating coords for x:{area['x']}, y:{area['y']}")
-        capture_dict = capture_dict[(area['x'], area['y'])]
+        capture_dict = capture_multi_dict[(area['x'], area['y'])]
         hint_coord = game_tile_to_screen_lefttop_coord(params, area['x'], area['y'])
         adjustment_images = []
         for comp in area['compare']:
-            adj_image_path = capture_dict[(comp['x'], comp['y'])]['path']
+            adj_image_path = capture_multi_dict[(comp['x'], comp['y'])]['path']
             adj_coords = estimate_dict[(comp['x'], comp['y'])]
             adjustment_images.append({
                 "image_path": adj_image_path,

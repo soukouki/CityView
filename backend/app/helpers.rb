@@ -12,7 +12,7 @@ module Helpers
     game_folders = Dir
       .glob(File.join(BASE_DIR, '**', 'ground.Outside.pak'))
       .map{ |path| File.dirname(path, 2) }
-      .map{ |path| path.sub(/^#{Regexp.escape(BASE_DIR)}/, '') }
+      .map{ |path| path.sub(/^#{Regexp.escape(BASE_DIR)}\//, '') }
       .uniq
 
     game_folders.map do |folder_path|

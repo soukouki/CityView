@@ -8,8 +8,13 @@ require_relative 'db'
 require_relative 'prefect'
 require_relative 'storage'
 require_relative 'helpers'
+require_relative 'job_monitor'
 
+# DB接続初期化
 DB.connect!
+
+# Jobモニタリング開始
+JobMonitor.start!
 
 # ========================================
 # MainApp (ポート 4567)

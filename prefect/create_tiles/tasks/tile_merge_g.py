@@ -42,7 +42,7 @@ def tile_merge_g(params: CreateTilesParams, z: int, gx: int, gy: int, child_resu
             
             # 子タイルが1つ以上あればマージ
             if tiles_to_merge:
-                output_path = f"/images/rawtiles/{params.save_data_name}/{z}/{tx}/{ty}.png"
+                output_path = f"/images/rawtiles/{params.map_id}/{z}/{tx}/{ty}.png"
                 if check_exists(output_path):
                     log(f"  Output already exists at {output_path}, skipping merge.")
                     merged_tiles[f"z{z}_x{tx}_y{ty}"] = output_path
