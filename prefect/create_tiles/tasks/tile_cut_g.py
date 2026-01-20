@@ -12,9 +12,9 @@ def tile_cut_g(params: CreateTilesParams, gx: int, gy: int, related_areas: list,
     log(f"Received {len(capture_results)} capture results groups")
     for capture_result in capture_results:
         log(" Capture result:")
-        for xy_str, image_path in capture_result.items():
+        for xy_str, capture_dict in capture_result.items():
             x, y = parse_xy_str(xy_str)
-            log(f"  Capture result - coords: ({x}, {y}), image_path: {image_path}")
+            log(f"  Capture result - coords: ({x}, {y}), capture_dict: {capture_dict}")
     log(f"Received {len(estimate_results)} estimate results groups")
     for estimate_result in estimate_results:
         log(" Estimate result:")
@@ -23,39 +23,39 @@ def tile_cut_g(params: CreateTilesParams, gx: int, gy: int, related_areas: list,
             log(f"  Estimate result - coords: ({x}, {y}), estimated coords: ({coords['x']}, {coords['y']})")
 
     # capture_resultsとestimate_resultsを辞書に変換しておく
-    capture_dict = {}
+    capture_many_dict = {}
     for capture_result in capture_results:
-        for xy_str, image_path in capture_result.items():
+        for xy_str, capture_dict in capture_result.items():
             x, y = parse_xy_str(xy_str)
-            capture_dict[(x, y)] = image_path
-    estimate_dict = {}
+            capture_many_dict[(x, y)] = capture_dict
+    estimate_many_dict = {}
     for estimate_result in estimate_results:
         for xy_str, coords in estimate_result.items():
             x, y = parse_xy_str(xy_str)
-            estimate_dict[(x, y)] = coords
+            estimate_many_dict[(x, y)] = coords
 
     # 各エリアのスクリーン座標範囲を事前計算
     area_screen_ranges = []
     for area in related_areas:
         ax, ay = area['x'], area['y']
-        if (ax, ay) not in estimate_dict:
+        if (ax, ay) not in estimate_many_dict:
             continue
-        estimated_coords = estimate_dict[(ax, ay)]
+        estimated_coords = estimate_many_dict[(ax, ay)]
         screen_x = estimated_coords['x']
         screen_y = estimated_coords['y']
         area_screen_ranges.append({
             'x': ax,
             'y': ay,
-            'screen_x_min': screen_x - params['capture']['margin_width'],
-            'screen_y_min': screen_y - params['capture']['margin_height'],
-            'screen_x_max': screen_x + params.image_width + params['capture']['margin_width'],
-            'screen_y_max': screen_y + params.image_height + params['capture']['margin_height'],
+            'screen_x_min': screen_x - params.capture.margin_width,
+            'screen_y_min': screen_y - params.capture.margin_height,
+            'screen_x_max': screen_x + params.image_width + params.capture.margin_width,
+            'screen_y_max': screen_y + params.image_height + params.capture.margin_height,
         })
 
     # グループ内の各タイルを処理
     cut_tiles = {}
-    tile_group_size = params['tile_group_size']
-    max_z = params.max_z()
+    tile_group_size = params.tile_group_size
+    max_z = params.max_z
     for tx in range(gx, gx + tile_group_size):
         for ty in range(gy, gy + tile_group_size):
             # このタイルのスクリーン座標範囲を計算
@@ -78,15 +78,15 @@ def tile_cut_g(params: CreateTilesParams, gx: int, gy: int, related_areas: list,
                 
                 ax, ay = area_range['x'], area_range['y']
                 images.append({
-                    "path": capture_dict[(ax, ay)],
-                    "coords": estimate_dict[(ax, ay)],
+                    "path": capture_many_dict[(ax, ay)]['path'],
+                    "coords": estimate_many_dict[(ax, ay)],
                 })
             
             # 画像が1つもないとき(=地図タイルがマップ外)はスキップ
             if not images:
                 continue
             
-            output_path = f"/images/rawtiles/{params['save_data_name']}/{max_z}/{tx}/{ty}.png"
+            output_path = f"/images/rawtiles/{params.map_id}/{max_z}/{tx}/{ty}.png"
             if check_exists(output_path):
                 log(f"  Output already exists at {output_path}, skipping tile cut.")
                 cut_tiles[f"z{max_z}_x{tx}_y{ty}"] = output_path

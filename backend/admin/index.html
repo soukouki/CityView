@@ -24,7 +24,7 @@
         <div class="flex justify-between items-center mb-4">
           <h2 class="text-xl font-bold text-gray-800">システムステータス</h2>
           <button @click="fetchStatus" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition">
-            更新
+            手動更新
           </button>
         </div>
 
@@ -347,6 +347,7 @@
           isSubmitting: false,
           errorMessage: '',
           successMessage: '',
+          pollingInterval: null, // ポーリング用のタイマーIDを保持
           
           options: {
             folders: [],
@@ -495,6 +496,18 @@
       mounted() {
         this.fetchOptions();
         this.fetchStatus();
+        
+        // 5秒間隔で自動ポーリングを開始
+        this.pollingInterval = setInterval(() => {
+          this.fetchStatus();
+        }, 5000);
+      },
+      
+      beforeUnmount() {
+        // コンポーネント破棄時にポーリングを停止
+        if (this.pollingInterval) {
+          clearInterval(this.pollingInterval);
+        }
       },
       
       methods: {

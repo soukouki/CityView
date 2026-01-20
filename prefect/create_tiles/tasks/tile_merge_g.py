@@ -19,7 +19,7 @@ def tile_merge_g(params: CreateTilesParams, z: int, gx: int, gy: int, child_resu
         child_tiles.update(result)
 
     merged_tiles = {}
-    tile_group_size = params['tile_group_size']
+    tile_group_size = params.tile_group_size
     for tx in range(gx, gx + tile_group_size):
         for ty in range(gy, gy + tile_group_size):
             # 子タイルのキーを生成
@@ -42,7 +42,7 @@ def tile_merge_g(params: CreateTilesParams, z: int, gx: int, gy: int, child_resu
             
             # 子タイルが1つ以上あればマージ
             if tiles_to_merge:
-                output_path = f"/images/rawtiles/{params['save_data_name']}/{z}/{tx}/{ty}.png"
+                output_path = f"/images/rawtiles/{params.save_data_name}/{z}/{tx}/{ty}.png"
                 if check_exists(output_path):
                     log(f"  Output already exists at {output_path}, skipping merge.")
                     merged_tiles[f"z{z}_x{tx}_y{ty}"] = output_path

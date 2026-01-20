@@ -1,13 +1,13 @@
 
+import math
 from typing import Literal
-from typing_extensions import TypedDict
-from pydantic import Field
+from pydantic import Field, BaseModel
 
-class MapSize(TypedDict):
+class MapSize(BaseModel):
     x: int = Field(512, description="X方向のマップサイズ(タイル数)")
     y: int = Field(512, description="Y方向のマップサイズ(タイル数)")
 
-class CaptureConfig(TypedDict):
+class CaptureConfig(BaseModel):
     crop_offset_x: int = Field(128, description="撮影時の左右クロップ幅(px)")
     crop_offset_y: int = Field(64, description="撮影時の上下クロップ高さ(px)")
     margin_width: int = Field(160, description="画像の左右のりしろ幅(px)")
@@ -15,19 +15,23 @@ class CaptureConfig(TypedDict):
     effective_width: int = Field(3200, description="画像ののりしろを除いた有効幅(px)")
     effective_height: int = Field(1600, description="画像ののりしろを除いた有効高さ(px)")
 
+    @property
     def image_width(self) -> int:
-        return self['effective_width'] + self['margin_width'] * 2
+        return self.effective_width + self.margin_width * 2
 
+    @property
     def image_height(self) -> int:
-        return self['effective_height'] + self['margin_height'] * 2
+        return self.effective_height + self.margin_height * 2
 
+    @property
     def capture_width(self) -> int:
-        image_width = self.image_width()
-        return image_width + self['crop_offset_x'] * 2
+        image_width = self.image_width
+        return image_width + self.crop_offset_x * 2
 
+    @property
     def capture_height(self) -> int:
-        image_height = self.image_height()
-        return image_height + self['crop_offset_y'] * 2
+        image_height = self.image_height
+        return image_height + self.crop_offset_y * 2
 
 ZoomLevel = Literal[
     "one_eighth",
@@ -39,7 +43,8 @@ ZoomLevel = Literal[
 
 TileQuality = int | Literal["lossless"]
 
-class CreateTilesParams(TypedDict):
+class CreateTilesParams(BaseModel):
+    map_id: int
     folder_path: str
     binary_name: str
     pakset_name: str
@@ -55,6 +60,7 @@ class CreateTilesParams(TypedDict):
     capture_redraw_wait_seconds: float
     capture: CaptureConfig
 
+    @property
     def adjusted_paksize(self) -> int:
         zoom_level_map = {
             "one_eighth": 0.125,
@@ -65,13 +71,16 @@ class CreateTilesParams(TypedDict):
         }
         return int(self.paksize * zoom_level_map[self.zoom_level])
 
+    @property
     def full_width(self) -> int:
-        adjusted_paksize = self.adjusted_paksize()
-        return (adjusted_paksize // 2) * (self.map_size['width'] + self.map_size['height']) + self.capture['margin_width'] * 4
+        adjusted_paksize = self.adjusted_paksize
+        return (adjusted_paksize // 2) * (self.map_size.x + self.map_size.y) + self.capture.margin_width * 4
 
+    @property
     def full_height(self) -> int:
-        adjusted_paksize = self.adjusted_paksize()
-        return (adjusted_paksize // 4) * (self.map_size['width'] + self.map_size['height']) + self.capture['margin_height'] * 2
+        adjusted_paksize = self.adjusted_paksize
+        return (adjusted_paksize // 4) * (self.map_size.x + self.map_size.y) + self.capture.margin_height * 2
 
+    @property
     def max_z(self) -> int:
-        return math.ceil(math.log2(max(self.full_width(), self.full_height()) // self.tile_size))
+        return math.ceil(math.log2(max(self.full_width, self.full_height) // self.tile_size))

@@ -34,6 +34,7 @@ from create_tiles.flow_params import CreateTilesParams, MapSize, ZoomLevel, Tile
     ),
 )
 def create_tiles(
+    map_id: Annotated[int, Field(description="マップID")],
     folder_path: Annotated[str, Field(description="ゲームフォルダのパス")],
     binary_name: Annotated[str, Field(description="ゲーム実行ファイル名")],
     pakset_name: Annotated[str, Field(description="pakset名")],
@@ -51,6 +52,7 @@ def create_tiles(
     if zoom_level not in ['one_eighth', 'quarter', 'half', 'normal', 'double']:
         raise ValueError(f"Invalid zoom_level value: {zoom_level}")
     params = CreateTilesParams(
+        map_id=map_id,
         folder_path=folder_path,
         binary_name=binary_name,
         pakset_name=pakset_name,
@@ -68,9 +70,9 @@ def create_tiles(
     )
 
     strategy = CaptureStrategy(
-        map_x=params['map_size']['x'],
-        map_y=params['map_size']['y'],
-        delta=params['delta'],
+        map_x=params.map_size.x,
+        map_y=params.map_size.y,
+        delta=params.delta,
     )
     areas_groups = strategy.generate_capture_areas_groups()
     areas_to_group = {}
@@ -150,11 +152,11 @@ def create_tiles(
     # タイル数が多いので、tile_group_size x tile_group_sizeごとにまとめて処理する
 
     # タイルの総数
-    max_z = params.max_z()
+    max_z = params.max_z
     total_tiles_per_axis = 2 ** max_z
     
     # マップが極端に小さい場合、グループサイズを調整
-    actiual_group_size = min(params['tile_group_size'], total_tiles_per_axis)
+    actual_group_size = min(params.tile_group_size, total_tiles_per_axis)
 
     # 各エリアのカバー範囲を事前計算
     print("Calculating area coverage...")
@@ -166,10 +168,10 @@ def create_tiles(
             screen_x = screen_coord[0]
             screen_y = screen_coord[1]
             # 念の為もうちょっと余裕を持たせてキャプチャ範囲を計算
-            capture_x_min = screen_x - params['capture']['margin_width']
-            capture_y_min = screen_y - params['capture']['margin_height']
-            capture_x_max = screen_x + params.image_width() + params['capture']['margin_width']
-            capture_y_max = screen_y + params.image_height() + params['capture']['margin_height']
+            capture_x_min = screen_x - params.capture.margin_width
+            capture_y_min = screen_y - params.capture.margin_height
+            capture_x_max = screen_x + params.capture.image_width + params.capture.margin_width
+            capture_y_max = screen_y + params.capture.image_height + params.capture.margin_height
             
             # スクショの4つの角のスクショ座標系での位置を計算
             corners_in_screen_coords = [
@@ -349,7 +351,7 @@ def create_tiles(
             gx=gx,
             gy=gy,
             tile_results=tile_cut_tasks[task_id],
-            quality=params['tile_quality_max_zoom'],
+            quality=params.tile_quality_max_zoom,
         )
     
     # z=max_z-1〜0はtile_merge_gから
@@ -370,7 +372,7 @@ def create_tiles(
                 gx=gx,
                 gy=gy,
                 tile_results=tile_merge_tasks[task_id],
-                quality=params['tile_quality_other'],
+                quality=params.tile_quality_other,
             )
 
     # ---------- 一枚絵生成タスク ----------
@@ -387,8 +389,8 @@ def create_tiles(
     create_panel_tasks = {}
     for res in resolutions:
         # 解像度を満たすのに必要なzoomレベルを計算
-        scale_x = res['width'] / params['tile_size'] # 横方向に必要なタイル数
-        scale_y = res['height'] / params['tile_size'] # 縦方向に必要なタイル数
+        scale_x = res['width'] / params.tile_size # 横方向に必要なタイル数
+        scale_y = res['height'] / params.tile_size # 縦方向に必要なタイル数
         scale = max(scale_x, scale_y)
         z_plus = math.log2(scale) # scaleで倍率が上がるので、その分を補正
         z = min(

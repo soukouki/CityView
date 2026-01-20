@@ -304,10 +304,66 @@
 ##### Prefect Agent専用内部API(ポート `8002`)
 | メソッド | パス | 説明 | リクエスト | レスポンス |
 |---|---|---|---|---|
-| POST | `/api/screenshots` | スクリーンショットメタデータ保存 | `{"map_id": number, "game_tile": {"x": number, "y": number}, "path": "string"}` | `{"screenshot_id": "string"}` |
-| GET | `/api/screenshots/
-| PUT | `/api/screenshots/{screenshot_id}` | スクリーンショットの推定座標更新 |
-| POST | `/api/panels` | 一枚絵メタデータ保存 |
+| POST | `/api/screenshots` | スクリーンショット情報を登録 | 下記参照 | `{"screenshot_id": "string"}` |
+| GET | `/api/screenshots/:id` | スクリーンショット情報を取得 | パスパラメータ | 下記参照 |
+| PUT | `/api/screenshots/:id` | スクリーンショットの推定座標を更新 | 下記参照 | `{"status": "ok"}` |
+| POST | `/api/panels` | パネル（一枚絵）情報を登録 | 下記参照 | `{"panel_id": "string"}` |
+| PUT | `/api/maps/:id/started_at` | マップ生成開始日時を更新 | パスパラメータ | `{"status": "ok"}` |
+| PUT | `/api/maps/:id/status` | マップのステータスを更新 | 下記参照 | `{"status": "ok"}` |
+
+- **POST `/api/screenshots` リクエストボディ**
+  ```json
+  {
+    "map_id": number,
+    "path": "string",
+    "game_tile": {
+      "x": number,
+      "y": number
+    }
+  }
+  ```
+
+- **GET `/api/screenshots/:id` レスポンスボディ**
+  ```json
+  {
+    "id": number,
+    "map_id": number,
+    "game_tile_x": number,
+    "game_tile_y": number,
+    "path": "string",
+    "estimated_screen_x": number | null,
+    "estimated_screen_y": number | null,
+    "created_at": "string"  // ISO 8601日時形式
+  }
+  ```
+
+- **PUT `/api/screenshots/:id` リクエストボディ**
+  ```json
+  {
+    "estimated_screen_x": number,
+    "estimated_screen_y": number
+  }
+  ```
+
+- **POST `/api/panels` リクエストボディ**
+  ```json
+  {
+    "map_id": number,
+    "name": "string",
+    "path": "string",
+    "resolution": {
+      "width": number,
+      "height": number
+    }
+  }
+  ```
+
+- **PUT `/api/maps/:id/status` リクエストボディ**
+  ```json
+  {
+    "status": "processing" | "completed" | "failed"  // 必須: マップステータス
+  }
+  ```
 
 ### 2.3 Prefect層
 
