@@ -20,19 +20,21 @@ CREATE TYPE zoom_level as ENUM (
 
 CREATE TABLE maps (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-    status map_status NOT NULL,
+    name TEXT NOT NULL,
     description TEXT NOT NULL,
     copyright TEXT NOT NULL,
-    game_path TEXT NOT NULL,
-    pakset TEXT NOT NULL,
+    folder_path TEXT NOT NULL,
+    binary_name TEXT NOT NULL,
+    pakset_name TEXT NOT NULL,
     paksize INTEGER NOT NULL
         CHECK (paksize > 0),
-    save_data TEXT NOT NULL,
+    save_data_name TEXT NOT NULL,
     map_size_x INTEGER NOT NULL
         CHECK (map_size_x > 0),
     map_size_y INTEGER NOT NULL
         CHECK (map_size_y > 0),
     zoom_level zoom_level NOT NULL,
+    status map_status NOT NULL,
     -- マップを生成し終わって後悔した日時(nullable)
     published_at TIMESTAMP WITH TIME ZONE NULL,
     -- マップ生成ジョブが始まって撮影が始まった日時(nullable)

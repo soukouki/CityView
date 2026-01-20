@@ -2,34 +2,17 @@ require 'json'
 
 module Helpers
   # ========================================
-  # パラメータ計算
-  # ========================================
-
-  def self.calculate_capture_params
-    {
-      crop_offset_x: ENV['CROP_OFFSET_X'].to_i,
-      crop_offset_y: ENV['CROP_OFFSET_Y'].to_i,
-      margin_width: ENV['IMAGE_MARGIN_WIDTH'].to_i,
-      margin_height: ENV['IMAGE_MARGIN_HEIGHT'].to_i,
-      effective_width: ENV['IMAGE_EFFECTIVE_WIDTH'].to_i,
-      effective_height: ENV['IMAGE_EFFECTIVE_HEIGHT'].to_i,
-      image_width: ENV['IMAGE_WIDTH'].to_i,
-      image_height: ENV['IMAGE_HEIGHT'].to_i,
-      capture_width: ENV['CAPTURE_WIDTH'].to_i,
-      capture_height: ENV['CAPTURE_HEIGHT'].to_i
-    }
-  end
-
-  # ========================================
   # ゲームフォルダスキャン
   # ========================================
 
+  BASE_DIR = '/app/bin'
+
   def self.scan_game_folders
     # /app/bin以下にあるground.Outside.pakを探し、その1つ上のフォルダをゲームフォルダとする
-    base_dir = '/app/bin'
     game_folders = Dir
-      .glob(File.join(base_dir, '**', 'ground.Outside.pak'))
+      .glob(File.join(BASE_DIR, '**', 'ground.Outside.pak'))
       .map{ |path| File.dirname(path, 2) }
+      .map{ |path| path.sub(/^#{Regexp.escape(BASE_DIR)}/, '') }
       .uniq
 
     game_folders.map do |folder_path|
@@ -44,20 +27,20 @@ module Helpers
 
   def self.list_binaries(folder)
     Dir
-      .glob(File.join(folder, '*'))
+      .glob(File.join(BASE_DIR, folder, '*'))
       .select{ |path| File.file?(path) && File.executable?(path) }
       .map{ |path| { name: File.basename(path), path: path } }
   end
 
   def self.list_paksets(folder)
     Dir
-      .glob(File.join(folder, '*'))
+      .glob(File.join(BASE_DIR, folder, '*'))
       .select{ |path| File.directory?(path) && File.exist?(File.join(path, 'ground.Outside.pak')) }
       .map{ |path| { name: File.basename(path) } }
   end
 
   def self.list_save_data(folder)
-    save_dir = File.join(folder, 'save')
+    save_dir = File.join(BASE_DIR, folder, 'save')
     return [] unless Dir.exist?(save_dir)
 
     Dir.glob(File.join(save_dir, '*.sve'))
@@ -71,16 +54,17 @@ module Helpers
   def self.format_public_map_response(map, panels)
     {
       map_id: map[:id],
+      name: map[:name],
       status: map[:status],
       description: map[:description],
       copyright: map[:copyright],
-      game_path: map[:game_path],
-      pakset: map[:pakset],
+      binary_name: map[:binary_name],
+      pakset_name: map[:pakset_name],
       paksize: map[:paksize],
-      save_data: map[:save_data],
+      save_data_name: map[:save_data_name],
       map_size: {
-        width: map[:map_size_width],
-        height: map[:map_size_height]
+        x: map[:map_size_x],
+        y: map[:map_size_y]
       },
       panels: panels.map do |panel|
         {
@@ -105,16 +89,18 @@ module Helpers
   def self.format_admin_map_response(map, panels)
     {
       map_id: map[:id],
+      name: map[:name],
       status: map[:status],
       description: map[:description],
       copyright: map[:copyright],
-      game_path: map[:game_path],
-      pakset: map[:pakset],
+      folder_path: map[:folder_path],
+      binary_name: map[:binary_name],
+      pakset_name: map[:pakset_name],
       paksize: map[:paksize],
-      save_data: map[:save_data],
+      save_data_name: map[:save_data_name],
       map_size: {
-        width: map[:map_size_width],
-        height: map[:map_size_height]
+        x: map[:map_size_x],
+        y: map[:map_size_y]
       },
       panels: panels.map do |panel|
         {
@@ -169,13 +155,13 @@ module Helpers
     {
       folders: scan_game_folders,
       threads: {
-        all: 10,
-        'service-capture' => 2,
-        'service-estimate' => 2,
-        'service-tile-cut' => 4,
-        'service-tile-merge' => 2,
-        'service-tile-compress' => 2,
-        'service-create-panel' => 1
+        all: 14,
+        'service-capture' => 9,
+        'service-estimate' => 5,
+        'service-tile-cut' => 10,
+        'service-tile-merge' => 5,
+        'service-tile-compress' => 5,
+        'service-create-panel' => 3
       }
     }
   end

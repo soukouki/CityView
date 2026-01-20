@@ -23,6 +23,7 @@ WORKDIR /app
 
 COPY app ./app
 COPY public ./public
+COPY admin ./admin
 
 COPY nginx.conf /etc/nginx/nginx.conf
 

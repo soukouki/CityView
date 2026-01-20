@@ -136,13 +136,13 @@
   [
     {
       "map_id": number,
-      "status": "completed",
+      "name": "string",
       "description": "string",
       "copyright": "string",
-      "game_path": "string",
-      "pakset": "string",
+      "binary_name": "string",
+      "pakset_name": "string",
       "paksize": number,
-      "save_data": "string",
+      "save_data_name": "string",
       "map_size": {
         "x": number,
         "y": number
@@ -185,13 +185,14 @@
     "maps": [
       {
         "map_id": number,
-        "status": "processing" | "completed" | "failed",
+        "name": "string",
         "description": "string",
         "copyright": "string",
-        "game_path": "string",
-        "pakset": "string",
+        "folder_path": "string",
+        "binary_name": "string",
+        "pakset_name": "string",
         "paksize": number,
-        "save_data": "string",
+        "save_data_name": "string",
         "map_size": {
           "x": number,
           "y": number
@@ -207,6 +208,7 @@
           }
         ],
         "zoom_level": "one_eighth" | "quarter" | "half" | "normal" | "double",
+        "status": "processing" | "completed" | "failed",
         "published_at": "string", // マップを生成し終わって公開した日時
         "started_at": "string",   // マップ生成ジョブ開始日時
         "created_at": "string"    // マップ生成ジョブ作成日時
@@ -270,6 +272,9 @@
 - **POST `api/maps` リクエストボディ**
   ```json
   {
+    "name": "string",              // マップ名
+    "description": "string",       // マップの説明
+    "copyright": "string",         // 著作権表記
     "folder_path": "string",       // ゲームフォルダパス
     "binary_name": "string",       // 使用する本体名
     "pakset_name": "string",       // 使用するpakset名

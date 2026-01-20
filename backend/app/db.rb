@@ -18,25 +18,29 @@ module DB
   # ========================================
 
   def self.create_map(
+    name:,
     description:,
     copyright:,
-    game_path:,
-    pakset:,
+    folder_path:,
+    binary_name:,
+    pakset_name:,
     paksize:,
-    save_data:,
+    save_data_name:,
     map_size_x:,
     map_size_y:,
     zoom_level:,
     status: 'processing'
   )
     @db[:maps].insert(
+      name: name,
       status: status,
       description: description,
       copyright: copyright,
-      game_path: game_path,
-      pakset: pakset,
+      folder_path: folder_path,
+      binary_name: binary_name,
+      pakset_name: pakset_name,
       paksize: paksize,
-      save_data: save_data,
+      save_data_name: save_data_name,
       map_size_x: map_size_x,
       map_size_y: map_size_y,
       zoom_level: zoom_level,

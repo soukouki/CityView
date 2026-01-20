@@ -111,8 +111,8 @@ services:
     build: ./prefect
     command: prefect worker start --pool default-agent-pool
     environment:
-      PREFECT_LOGGING_LEVEL: "CRITICAL"
-      PREFECT_LOGGING_TO_API_ENABLED: false
+      # PREFECT_LOGGING_LEVEL: "CRITICAL"
+      # PREFECT_LOGGING_TO_API_ENABLED: false
       PREFECT_API_URL: http://prefect-server:4200/api
       SERVICE_CAPTURE_URL: http://service-capture:5000
       SERVICE_ESTIMATE_URL: http://service-estimate:5001

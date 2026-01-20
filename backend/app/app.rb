@@ -97,7 +97,7 @@ class AdminApp < Sinatra::Base
 
     # バリデーション
     required_fields = %w[
-      folder_path binary_name pakset_name paksize save_data_name zoom_level
+      name folder_path binary_name pakset_name paksize save_data_name zoom_level
       tile_quality_max_zoom tile_quality_other tile_group_size delta
       capture_redraw_wait_seconds
     ]
@@ -107,16 +107,49 @@ class AdminApp < Sinatra::Base
       halt 400, { error: 'Missing required fields', details: missing_fields }.to_json
     end
 
+    # map_sizeのバリデーション
+    unless request_body['map_size'].is_a?(Hash) &&
+           request_body['map_size']['x'].is_a?(Integer) &&
+           request_body['map_size']['y'].is_a?(Integer)
+      halt 400, { error: 'Invalid map_size', details: 'map_size must have x and y as integers' }.to_json
+    end
+
+    # captureのバリデーション
+    unless request_body['capture'].is_a?(Hash)
+      halt 400, { error: 'Invalid capture', details: 'capture must be an object' }.to_json
+    end
+
+    capture_fields = %w[crop_offset_x crop_offset_y margin_width margin_height effective_width effective_height]
+    missing_capture_fields = capture_fields - request_body['capture'].keys
+    unless missing_capture_fields.empty?
+      halt 400, { error: 'Missing capture fields', details: missing_capture_fields }.to_json
+    end
+
+    # zoom_levelのバリデーション
+    valid_zoom_levels = %w[one_eighth quarter half normal double]
+    unless valid_zoom_levels.include?(request_body['zoom_level'])
+      halt 400, { error: 'Invalid zoom_level', details: "Must be one of: #{valid_zoom_levels.join(', ')}" }.to_json
+    end
+
+    # qualityのバリデーション("lossless" or 0-100の整数)
+    [request_body['tile_quality_max_zoom'], request_body['tile_quality_other']].each do |quality|
+      unless quality == 'lossless' || (quality.is_a?(Integer) && quality.between?(0, 100))
+        halt 400, { error: 'Invalid tile quality', details: 'Must be "lossless" or an integer between 0 and 100' }.to_json
+      end
+    end
+
     # マップ作成
     map_id = DB.create_map(
+      name: request_body['name'],
       description: request_body['description'] || '',
       copyright: request_body['copyright'] || '',
-      game_path: request_body['folder_path'],
-      pakset: request_body['pakset_name'],
+      folder_path: request_body['folder_path'],
+      binary_name: request_body['binary_name'],
+      pakset_name: request_body['pakset_name'],
       paksize: request_body['paksize'],
-      save_data: request_body['save_data_name'],
-      map_size_x: request_body.dig('map_size', 'x') || 0,
-      map_size_y: request_body.dig('map_size', 'y') || 0,
+      save_data_name: request_body['save_data_name'],
+      map_size_x: request_body.dig('map_size', 'x'),
+      map_size_y: request_body.dig('map_size', 'y'),
       zoom_level: request_body['zoom_level'],
       status: 'processing'
     )
@@ -137,7 +170,25 @@ class AdminApp < Sinatra::Base
       deployment = JSON.parse(deployment_response.body)
       deployment_id = deployment['id']
 
-      flow_response = Prefect.create_flow_run(deployment_id, request_body.merge(map_id: map_id))
+      # Flow起動パラメータの構築
+      flow_params = {
+        map_id: map_id,
+        folder_path: request_body['folder_path'],
+        binary_name: request_body['binary_name'],
+        pakset_name: request_body['pakset_name'],
+        paksize: request_body['paksize'],
+        save_data_name: request_body['save_data_name'],
+        map_size: request_body['map_size'],
+        zoom_level: request_body['zoom_level'],
+        tile_quality_max_zoom: request_body['tile_quality_max_zoom'],
+        tile_quality_other: request_body['tile_quality_other'],
+        tile_group_size: request_body['tile_group_size'],
+        delta: request_body['delta'],
+        capture_redraw_wait_seconds: request_body['capture_redraw_wait_seconds'],
+        capture: request_body['capture']
+      }
+
+      flow_response = Prefect.create_flow_run(deployment_id, flow_params)
       flow_run_id = flow_response['id']
     rescue => e
       DB.update_map_status(map_id, 'failed')
