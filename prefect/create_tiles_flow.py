@@ -1,6 +1,7 @@
 
 import asyncio
 from prefect import flow, task, get_client
+from prefect.concurrency.sync import concurrency
 from datetime import timedelta, datetime
 import math
 from collections import defaultdict
@@ -98,6 +99,12 @@ def create_tiles(
         capture=capture,
     )
 
+    # グローバルな並行実行制限を強制
+    with concurrency("create-tiles-lock", occupy=1):
+        # 実際の処理
+        create_tiles_main(params)
+
+def create_tiles_main(params: CreateTilesParams):
     print("Ensuring concurrency limits...")
     asyncio.run(ensure_concurrency_limits())
 
@@ -400,7 +407,7 @@ def create_tiles(
         {"width": 3440, "height": 1440, "id": "UWQHD"},
         {"width": 3840, "height": 2160, "id": "4K"},
         {"width": 5120, "height": 2880, "id": "5K"},
-        {"width": 7680, "height": 4320, "id": "8K"},
+        # {"width": 7680, "height": 4320, "id": "8K"}, # なぜかエラーが出て動かないので一旦外す
     ]
     create_panel_tasks = {}
     for res in resolutions:

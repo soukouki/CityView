@@ -277,7 +277,12 @@
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-1">再描画待ち時間 (秒) *</label>
                   <input v-model.number="form.capture_redraw_wait_seconds" type="number" required min="0" step="0.1" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-                  <p class="mt-1 text-xs text-gray-500">開発が進んでいる/縮小撮影の場合は1.0秒、それ以外は0.2秒が推奨</p>
+                  <p class="mt-1 text-xs text-gray-500">
+                    【目安】<br>
+                    ズーム時で開発が進んでいない:0.5秒<br>
+                    少し縮小めだったり開発が進んでいる:1.0秒<br>
+                    かなり縮小していたり開発がかなり進んでいる:2.0秒
+                  </p>
                 </div>
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-1">糊代の割合 (%)</label>
@@ -547,8 +552,8 @@
               y: 1024
             },
             zoom_level: 'quarter',
-            delta: 200,
-            capture_redraw_wait_seconds: 0.2,
+            delta: 800,
+            capture_redraw_wait_seconds: 0.5,
             tile_group_size: 16
           },
           
@@ -586,14 +591,14 @@
           const zoom = this.form.zoom_level;
           
           const basePaksize = 128;
-          const ratio = paksize / basePaksize;
+          const ratio = basePaksize / paksize;
           
           const baseRecommendations = {
-            one_eighth: 800,
-            quarter: 400,
-            half: 200,
-            normal: 100,
-            double: 50
+            one_eighth: 960,
+            quarter: 480,
+            half: 240,
+            normal: 120,
+            double: 60,
           };
           
           return Math.round(baseRecommendations[zoom] * ratio);

@@ -71,5 +71,9 @@ module ServiceCapture
       sleep 0.05
       key("Page_Down")
     end
+
+    def clear_window
+      key("BackSpace")
+    end
   end
 end
