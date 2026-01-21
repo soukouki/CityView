@@ -33,7 +33,6 @@ module DB
   )
     @db[:maps].insert(
       name: name,
-      status: status,
       description: description,
       copyright: copyright,
       folder_path: folder_path,
@@ -44,6 +43,8 @@ module DB
       map_size_x: map_size_x,
       map_size_y: map_size_y,
       zoom_level: zoom_level,
+      status: status,
+      sort_order: @db[:maps].max(:sort_order).to_i + 1,
       created_at: Time.now
     )
   end
@@ -55,7 +56,7 @@ module DB
   def self.list_maps(status: nil)
     dataset = @db[:maps]
     dataset = dataset.where(status: status) if status
-    dataset.order(:id).all
+    dataset.order(:sort_order).all
   end
 
   def self.update_map_status(id, status)
@@ -81,6 +82,61 @@ module DB
       description: description,
       copyright: copyright
     )
+  end
+
+  def self.update_map_sort_order(id:, sort_order:)
+    if sort_order.nil? # 先頭に移動
+      @db.transaction do
+        @db.run <<-SQL
+          UPDATE maps
+          SET sort_order = sort_order + 1
+          WHERE sort_order >= 1;
+        SQL
+        @db.run <<-SQL
+          UPDATE maps
+          SET sort_order = 1
+          WHERE id = #{id};
+        SQL
+        @db.run <<-SQL
+          WITH ordered AS (
+            SELECT id, ROW_NUMBER() OVER (ORDER BY sort_order) as new_order
+            FROM maps
+          )
+          UPDATE maps
+          SET sort_order = ordered.new_order
+          FROM ordered
+          WHERE maps.id = ordered.id;
+        SQL
+      end
+    else # orderで指定されたマップの後ろに移動
+      @db.transaction do
+        @db.run <<-SQL
+          WITH target_order AS (
+              SELECT sort_order FROM maps WHERE id = #{id}
+          )
+          UPDATE maps
+          SET sort_order = sort_order + 1
+          WHERE sort_order > (SELECT sort_order FROM target_order);
+        SQL
+
+        @db.run <<-SQL
+          UPDATE maps
+          SET sort_order = #{sort_order + 1}
+          WHERE id = #{id};
+        SQL
+
+        @db.run <<-SQL
+          WITH ordered AS (
+              SELECT id, ROW_NUMBER() OVER (ORDER BY sort_order) as new_order
+              FROM maps
+          )
+          UPDATE maps
+          SET sort_order = ordered.new_order
+          FROM ordered
+          WHERE maps.id = ordered.id;
+        SQL
+      end
+    end
   end
 
   def self.delete_map(id)

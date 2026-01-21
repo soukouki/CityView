@@ -232,6 +232,24 @@ class AdminApp < Sinatra::Base
     { status: 'ok' }.to_json
   end
 
+  put '/api/maps/:id/position' do
+    content_type :json
+
+    begin
+      request_body = JSON.parse(request.body.read)
+    rescue JSON::ParserError
+      halt 400, { error: 'Invalid JSON' }.to_json
+    end
+    new_position = request_body['position']
+    unless new_position.is_a?(Integer) && new_position >= 0
+      halt 400, { error: 'Invalid position', details: 'Position must be a non-negative integer or null' }.to_json
+    end
+    map = DB.find_map(params[:id].to_i)
+    halt 404, { error: 'Map not found' }.to_json unless map
+    DB.update_map_sort_order(params[:id].to_i, new_position)
+    { status: 'ok' }.to_json
+  end
+
   delete '/api/maps/:id' do
     content_type :json
     

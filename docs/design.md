@@ -177,6 +177,7 @@
 | GET | `/api/options` | マップ生成オプション取得 | - | 下記参照 |
 | POST | `/api/maps` | マップ生成ジョブ作成、Flow起動 | 下記参照 | `{"job_id": "string"}` |
 | PUT  | `/api/maps/:id` | マップ・ジョブ更新 | 下記参照 | `{"status": "ok"}` |
+| PUT  | `/api/maps/:id/position` | マップの表示順序を変更 | 下記参照 | `{"status": "ok"}` |
 | DELETE | `/api/maps/:id` | マップ・ジョブ削除 | パスパラメータ | `{"status": "ok"}` |
 
 - **GET `/api/status` レスポンスボディ**
@@ -308,6 +309,13 @@
     "name": "string",              // マップ名
     "description": "string",       // マップの説明
     "copyright": "string"          // 著作権表記
+  }
+  ```
+
+- **PUT `/api/maps/:id/position` リクエストボディ**
+  ```json
+  {
+    "after_map_id": number | null  // このマップIDの後ろに移動。nullで先頭へ移動
   }
   ```
 

@@ -35,6 +35,7 @@ CREATE TABLE maps (
         CHECK (map_size_y > 0),
     zoom_level zoom_level NOT NULL,
     status map_status NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
     -- マップを生成し終わって後悔した日時(nullable)
     published_at TIMESTAMP WITH TIME ZONE NULL,
     -- マップ生成ジョブが始まって撮影が始まった日時(nullable)
@@ -42,6 +43,7 @@ CREATE TABLE maps (
     -- マップ生成ジョブを作ってマップを登録した日時
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE UNIQUE INDEX idx_maps_sort_order ON maps(sort_order);
 
 CREATE TABLE jobs (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,

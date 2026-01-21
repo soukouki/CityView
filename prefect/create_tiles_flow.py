@@ -38,6 +38,7 @@ async def ensure_concurrency_limits():
         "tile-compress": CONCURRENCY_TILE_COMPRESS,
         "panel": CONCURRENCY_CREATE_PANEL,
     }
+    print(f"Desired concurrency limits: {concurrency_limits}")
     # タグベースの並行実行制限
     async with get_client() as client:
         print("Setting up tag-based concurrency limits...")
