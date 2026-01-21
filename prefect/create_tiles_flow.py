@@ -127,8 +127,6 @@ def create_tiles(
         task_id = f"capture_g_x{gx}_y{gy}"
         capture_tasks[task_id] = capture_g.with_options(
             name=task_id,
-            retries=3,
-            retry_delay_seconds=300,
         ).submit(
             params=params,
             tasks=tasks_in_group,
@@ -165,8 +163,6 @@ def create_tiles(
         task_id = f"estimate_g_x{gx}_y{gy}"
         estimate_tasks[task_id] = estimate_g.with_options(
             name=task_id,
-            retries=3,
-            retry_delay_seconds=300,
         ).submit(
             params=params,
             group=group, # estimate用のグループの情報をそのまま渡す
@@ -300,8 +296,6 @@ def create_tiles(
         task_id = f"tile_cut_g_z{max_z}_gx{gx}_gy{gy}"
         tile_cut_tasks[task_id] = tile_cut_g.with_options(
             name=task_id,
-            retries=3,
-            retry_delay_seconds=300,
         ).submit(
             params=params,
             gx=gx,
@@ -346,8 +340,6 @@ def create_tiles(
             task_id = f"tile_merge_g_z{z}_gx{gx}_gy{gy}"
             tile_merge_tasks[task_id] = tile_merge_g.with_options(
                 name=task_id,
-                retries=3,
-                retry_delay_seconds=300,
             ).submit(
                 params=params,
                 z=z,
@@ -371,8 +363,6 @@ def create_tiles(
         compress_task_id = f"tile_compress_g_z{max_z}_gx{gx}_gy{gy}"
         tile_compress_tasks[compress_task_id] = tile_compress_g.with_options(
             name=compress_task_id,
-            retries=3,
-            retry_delay_seconds=300,
         ).submit(
             params=params,
             z=max_z,
@@ -392,8 +382,6 @@ def create_tiles(
             compress_task_id = f"tile_compress_g_z{z}_gx{gx}_gy{gy}"
             tile_compress_tasks[compress_task_id] = tile_compress_g.with_options(
                 name=compress_task_id,
-                retries=3,
-                retry_delay_seconds=300,
             ).submit(
                 params=params,
                 z=z,
@@ -406,13 +394,13 @@ def create_tiles(
     # ---------- 一枚絵生成タスク ----------
     print("Creating final panel task...")
     resolutions = [
-        {"width": 1280, "height": 720, "id": "hd"}, # HD
-        {"width": 1920, "height": 1080, "id": "fhd"}, # Full HD
-        {"width": 2560, "height": 1440, "id": "wqhd"}, # WQHD
-        {"width": 3440, "height": 1440, "id": "uwqhd"}, # UWQHD
-        {"width": 3840, "height": 2160, "id": "4k"}, # 4K
-        {"width": 5120, "height": 2880, "id": "5k"}, # 5K
-        {"width": 7680, "height": 4320, "id": "8k"}, # 8K
+        {"width": 1280, "height": 720, "id": "HD"},
+        {"width": 1920, "height": 1080, "id": "FHD"},
+        {"width": 2560, "height": 1440, "id": "WQHD"},
+        {"width": 3440, "height": 1440, "id": "UWQHD"},
+        {"width": 3840, "height": 2160, "id": "4K"},
+        {"width": 5120, "height": 2880, "id": "5K"},
+        {"width": 7680, "height": 4320, "id": "8K"},
     ]
     create_panel_tasks = {}
     for res in resolutions:
@@ -438,8 +426,6 @@ def create_tiles(
         task_id = f"panel_{res['id']}"
         create_panel_tasks[task_id] = create_panel.with_options(
             name=task_id,
-            retries=3,
-            retry_delay_seconds=300,
         ).submit(
             params=params,
             z=z,

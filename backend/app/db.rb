@@ -169,7 +169,7 @@ module DB
   end
 
   def self.list_panels_by_map_id(map_id)
-    @db[:panels].where(map_id: map_id).order(:id).all
+    @db[:panels].where(map_id: map_id).order(:resolution_width).all
   end
 
   # ========================================

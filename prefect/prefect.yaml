@@ -11,5 +11,6 @@ deployments:
     concurrency_limit:
       limit: 1
       collision_strategy: ENQUEUE
+      grace_period_seconds: 86400 # 24 hours、本当はもっと長くしたいが上限がこれなので仕方なく
     work_pool:
       name: default-agent-pool
