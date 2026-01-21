@@ -1,5 +1,5 @@
 name: cityview-workflows
-prefect-version: 2.16.0
+prefect-version: 3.6.0
 
 pull:
   - prefect.deployments.steps.set_working_directory:
@@ -8,6 +8,8 @@ pull:
 deployments:
   - name: create-tiles
     entrypoint: create_tiles_flow.py:create_tiles
-    concurrency_limit: 1
+    concurrency_limit:
+      limit: 1
+      collision_strategy: ENQUEUE
     work_pool:
       name: default-agent-pool

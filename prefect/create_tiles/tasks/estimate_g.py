@@ -1,16 +1,16 @@
 import requests
-from create_tiles.priority_task import priority_task
+from prefect import task
 from create_tiles.config import SERVICE_ESTIMATE_URL, BACKEND_INTERNAL_URL
 from create_tiles.utils import game_tile_to_screen_lefttop_coord, parse_xy_str, log
 from create_tiles.flow_params import CreateTilesParams
 
-@priority_task(task_type="estimate", retries=3, retry_delay_seconds=300)
+@task(tags=["estimate"], retries=3, retry_delay_seconds=300)
 def estimate_g(params: CreateTilesParams, group: list, capture_results: list, estimate_results: list):
     # どんなデータが来るか確認するためのデバッグ出力
     log("Estimating group")
     log(f"Group has {len(group)} areas")
     for area in group:
-        log(f"  x:{area['x']}, y:{area['y']}, priority:{area['priority']}")
+        log(f"  x:{area['x']}, y:{area['y']}")
         for comp in area['compare']:
             log(f"    compare x:{comp['x']}, y:{comp['y']}")
     log(f"Received {len(capture_results)} capture results groups")

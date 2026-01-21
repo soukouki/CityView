@@ -1,6 +1,6 @@
 import requests
-from create_tiles.priority_task import priority_task
-from create_tiles.config import (SERVICE_CREATE_PANEL_URL, BACKEND_INTERNAL_URL)
+from prefect import task
+from create_tiles.config import SERVICE_CREATE_PANEL_URL, BACKEND_INTERNAL_URL
 from create_tiles.utils import (
     game_tile_to_screen_coord,
     screen_coord_to_map_tile,
@@ -10,7 +10,7 @@ from create_tiles.utils import (
 )
 from create_tiles.flow_params import CreateTilesParams
 
-@priority_task(task_type="panel", retries=3, retry_delay_seconds=300)
+@task(tags=["panel"], retries=3, retry_delay_seconds=300)
 def create_panel(params: CreateTilesParams, z: int, resolution: dict, tile_results: list):
     log(f"Creating panel at zoom level {z} with resolution {resolution}")
     log(f"Received {len(tile_results)} tile groups")

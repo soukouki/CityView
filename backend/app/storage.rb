@@ -16,7 +16,7 @@ module Storage
   end
 
   def self.check_exists(path)
-    url = "#{BASE_URL}/files/exists"
+    url = "#{BASE_URL}/#{path}"
     response = HTTParty.head(url, query: { path: path })
     response.code == 200
   end

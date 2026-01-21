@@ -1,16 +1,25 @@
-from prefect import flow
+
+import asyncio
+from prefect import flow, task, get_client
 from datetime import timedelta, datetime
 import math
 from collections import defaultdict
 from typing import Annotated
 from pydantic import Field
-from create_tiles.priority_task_runner import PriorityTaskRunner
 from create_tiles.capture_strategy import CaptureStrategy
 from create_tiles.utils import (
     game_tile_to_screen_lefttop_coord,
     screen_coord_to_map_tile,
 )
-from create_tiles.config import TILE_SIZE
+from create_tiles.config import (
+    TILE_SIZE,
+    CONCURRENCY_CAPTURE,
+    CONCURRENCY_ESTIMATE,
+    CONCURRENCY_TILE_CUT,
+    CONCURRENCY_TILE_MERGE,
+    CONCURRENCY_TILE_COMPRESS,
+    CONCURRENCY_CREATE_PANEL,
+)
 from create_tiles.tasks.capture_g import capture_g
 from create_tiles.tasks.estimate_g import estimate_g
 from create_tiles.tasks.tile_cut_g import tile_cut_g
@@ -19,20 +28,39 @@ from create_tiles.tasks.tile_compress_g import tile_compress_g
 from create_tiles.tasks.create_panel import create_panel
 from create_tiles.flow_params import CreateTilesParams, MapSize, ZoomLevel, TileQuality, CaptureConfig
 
-@flow(
-    name='create_tiles',
-    task_runner=PriorityTaskRunner(
-        max_workers=14,
-        concurrency_limits={
-            "capture": 9,       # 2 replicas x 4 threads + 1
-            "estimate": 5,      # 2 replicas x 2 workers + 1
-            "tile-cut": 10,     # 4 replicas x 2 workers + 2 (本当は4 threadsあるが一旦保留)
-            "tile-merge": 5,    # 2 replicas x 2 workers + 1 (本当は4 threadsあるが一旦保留)
-            "tile-compress": 5, # 2 replicas x 2 workers + 1 (本当は4 threadsあるが一旦保留)
-            "panel": 3,         # 1 replica  x 2 workers + 1 (本当は4 threadsあるが一旦保留)
-        },
-    ),
-)
+async def ensure_concurrency_limits():
+    """並行実行制限が存在することを確認（存在しなければ作成）"""
+    concurrency_limits = {
+        "capture": CONCURRENCY_CAPTURE,
+        "estimate": CONCURRENCY_ESTIMATE,
+        "tile-cut": CONCURRENCY_TILE_CUT,
+        "tile-merge": CONCURRENCY_TILE_MERGE,
+        "tile-compress": CONCURRENCY_TILE_COMPRESS,
+        "panel": CONCURRENCY_CREATE_PANEL,
+    }
+    # タグベースの並行実行制限
+    async with get_client() as client:
+        print("Setting up tag-based concurrency limits...")
+        for tag, limit in concurrency_limits.items():
+            try:
+                existing = await client.read_concurrency_limit_by_tag(tag=tag)
+                if existing.concurrency_limit != limit:
+                    await client.delete_concurrency_limit_by_tag(tag=tag)
+                    await client.create_concurrency_limit(
+                        tag=tag,
+                        concurrency_limit=limit
+                    )
+                    print(f"  ✓ Updated tag '{tag}' limit to {limit}")
+                else:
+                    print(f"  ✓ Tag '{tag}' limit is already {limit}")
+            except Exception:
+                await client.create_concurrency_limit(
+                    tag=tag,
+                    concurrency_limit=limit
+                )
+                print(f"  ✓ Created tag '{tag}' with limit {limit}")
+
+@flow(name='create_tiles')
 def create_tiles(
     map_id: Annotated[int, Field(description="マップID")],
     folder_path: Annotated[str, Field(description="ゲームフォルダのパス")],
@@ -69,6 +97,9 @@ def create_tiles(
         capture=capture,
     )
 
+    print("Ensuring concurrency limits...")
+    asyncio.run(ensure_concurrency_limits())
+
     strategy = CaptureStrategy(
         map_x=params.map_size.x,
         map_y=params.map_size.y,
@@ -93,12 +124,10 @@ def create_tiles(
         gx = group[0]['x']
         gy = group[0]['y']
         task_id = f"capture_g_x{gx}_y{gy}"
-        priority = group[0]['priority']
         capture_tasks[task_id] = capture_g.with_options(
             name=task_id,
             retries=3,
             retry_delay_seconds=300,
-            priority=priority,
         ).submit(
             params=params,
             tasks=tasks_in_group,
@@ -133,12 +162,10 @@ def create_tiles(
         needed_capture_tasks = list(set(needed_capture_tasks))
         needed_estimate_tasks = list(set(needed_estimate_tasks))
         task_id = f"estimate_g_x{gx}_y{gy}"
-        priority = group[0]['priority']
         estimate_tasks[task_id] = estimate_g.with_options(
             name=task_id,
             retries=3,
             retry_delay_seconds=300,
-            priority=priority,
         ).submit(
             params=params,
             group=group, # estimate用のグループの情報をそのまま渡す
@@ -167,7 +194,7 @@ def create_tiles(
             screen_coord = game_tile_to_screen_lefttop_coord(params, area['x'], area['y'])
             screen_x = screen_coord[0]
             screen_y = screen_coord[1]
-            # 念の為もうちょっと余裕を持たせてキャプチャ範囲を計算
+            # 念のためもうちょっと余裕を持たせてキャプチャ範囲を計算
             capture_x_min = screen_x - params.capture.margin_width
             capture_y_min = screen_y - params.capture.margin_height
             capture_x_max = screen_x + params.capture.image_width + params.capture.margin_width
@@ -420,3 +447,17 @@ def create_tiles(
         )
 
     print(f"Total panel tasks: {len(create_panel_tasks)}")
+
+    # ---------- フロー完了 ----------
+    for task_dict, task_name in [
+        (capture_tasks, "Capture"),
+        (estimate_tasks, "Estimate"),
+        (tile_cut_tasks, "Tile Cut"),
+        (tile_merge_tasks, "Tile Merge"),
+        (tile_compress_tasks, "Tile Compress"),
+        (create_panel_tasks, "Create Panel"),
+    ]:
+        print(f"Waiting for {task_name} tasks to complete...")
+        for task in task_dict.values():
+            task.wait()
+    print("All tasks completed successfully.")

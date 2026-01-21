@@ -44,30 +44,6 @@ services:
       PREFECT_API_URL: http://prefect-server:4200/api
       STORAGE_URL: http://storage
       TZ: ${TZ:-Asia/Tokyo}
-      SIMUTRANS_EXECUTABLE: ${SIMUTRANS_EXECUTABLE}
-      PAKSET_NAME: ${PAKSET_NAME}
-      PAKSIZE: ${PAKSIZE}
-      SAVE_DATA_NAME: ${SAVE_DATA_NAME}
-      MAP_TILES_X: ${MAP_TILES_X}
-      MAP_TILES_Y: ${MAP_TILES_Y}
-      TILE_SIZE: ${TILE_SIZE}
-      TILE_QUALITY_MAX_ZOOM: ${TILE_QUALITY_MAX_ZOOM}
-      TILE_QUALITY_OTHER: ${TILE_QUALITY_OTHER}
-      TILE_GROUP_SIZE: ${TILE_GROUP_SIZE}
-      DELTA: ${DELTA}
-      CROP_OFFSET_X: ${CROP_OFFSET_X}
-      CROP_OFFSET_Y: ${CROP_OFFSET_Y}
-      IMAGE_MARGIN_WIDTH: ${IMAGE_MARGIN_WIDTH}
-      IMAGE_MARGIN_HEIGHT: ${IMAGE_MARGIN_HEIGHT}
-      IMAGE_EFFECTIVE_WIDTH: ${IMAGE_EFFECTIVE_WIDTH}
-      IMAGE_EFFECTIVE_HEIGHT: ${IMAGE_EFFECTIVE_HEIGHT}
-      IMAGE_WIDTH: ${IMAGE_WIDTH}
-      IMAGE_HEIGHT: ${IMAGE_HEIGHT}
-      CAPTURE_WIDTH: ${CAPTURE_WIDTH}
-      CAPTURE_HEIGHT: ${CAPTURE_HEIGHT}
-      ADJUSTED_PAKSIZE: ${ADJUSTED_PAKSIZE}
-      ZOOM_LEVEL: ${ZOOM_LEVEL}
-      CAPTURE_REDRAW_WAIT_SECONDS: ${CAPTURE_REDRAW_WAIT_SECONDS}
     ports:
       - "8000:8000" # メイン
       - "8001:8001" # 管理画面
@@ -88,14 +64,20 @@ services:
 
   # --- Prefect Layer ---
   prefect-server:
-    image: prefecthq/prefect:2.16.0-python3.11
+    image: prefecthq/prefect:3.6-python3.11
     command: prefect server start --host 0.0.0.0
     environment:
-      PREFECT_SERVER_API_HOST: 0.0.0.0
+      PREFECT_UI_API_URL: /api
       PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://postgres:postgres@db:5432/prefect
-      PREFECT_API_URL: http://prefect-server:4200/api
+      SERVICE_CAPTURE_REPLICAS: ${SERVICE_CAPTURE_REPLICAS}
+      SERVICE_CAPTURE_WORKERS_PER_REPLICA: ${SERVICE_CAPTURE_WORKERS_PER_REPLICA}
+      SERVICE_ESTIMATE_REPLICAS: ${SERVICE_ESTIMATE_REPLICAS}
+      SERVICE_TILE_CUT_REPLICAS: ${SERVICE_TILE_CUT_REPLICAS}
+      SERVICE_TILE_MERGE_REPLICAS: ${SERVICE_TILE_MERGE_REPLICAS}
+      SERVICE_TILE_COMPRESS_REPLICAS: ${SERVICE_TILE_COMPRESS_REPLICAS}
+      SERVICE_CREATE_PANEL_REPLICAS: ${SERVICE_CREATE_PANEL_REPLICAS}
     ports:
-      - "8003:4200"
+      - "4200:4200"
     depends_on:
       db:
         condition: service_healthy
@@ -171,7 +153,7 @@ services:
       CAPTURE_SCROT_TIMEOUT_SECONDS: 30
       CAPTURE_CROP_TIMEOUT_SECONDS: 30
       CAPTURE_UPLOAD_TIMEOUT_SECONDS: 30
-      CAPTURE_WORKER_THREADS: 4 # スクショ撮影・クリップ・アップロードを並列化するためのスレッド数
+      CAPTURE_WORKER_THREADS: ${SERVICE_CAPTURE_WORKERS_PER_REPLICA} # スクショ撮影・クリップ・アップロードを並列化するためのスレッド数
       CAPTURE_TTL_SECONDS: 300 # GAME_CAPTURE_TIMEOUT_SECONDSより長く設定すること
       GAME_BOOT_TIMEOUT_SECONDS: 300 # 大規模マップの場合は起動に時間がかかることがあるため長めに設定すること
       GAME_BOOT_POLL_INTERVAL_SECONDS: 5
@@ -185,7 +167,7 @@ services:
       timeout: 10s
       retries: 5
     deploy:
-      replicas: 2
+      replicas: ${SERVICE_CAPTURE_REPLICAS}
     restart: unless-stopped
 
   service-estimate:
@@ -198,7 +180,7 @@ services:
       timeout: 10s
       retries: 5
     deploy:
-      replicas: 2
+      replicas: ${SERVICE_ESTIMATE_REPLICAS}
     restart: unless-stopped
 
   service-tile-cut:
@@ -207,7 +189,7 @@ services:
       STORAGE_URL: http://storage
       TILE_SIZE: ${TILE_SIZE}
     deploy:
-      replicas: 4
+      replicas: ${SERVICE_TILE_CUT_REPLICAS}
     restart: unless-stopped
 
   service-tile-merge:
@@ -216,7 +198,7 @@ services:
       STORAGE_URL: http://storage
       TILE_SIZE: ${TILE_SIZE}
     deploy:
-      replicas: 2
+      replicas: ${SERVICE_TILE_MERGE_REPLICAS}
     restart: unless-stopped
 
   service-tile-compress:
@@ -224,7 +206,7 @@ services:
     environment:
       STORAGE_URL: http://storage
     deploy:
-      replicas: 2
+      replicas: ${SERVICE_TILE_COMPRESS_REPLICAS}
     restart: unless-stopped
 
   service-create-panel:
@@ -233,5 +215,5 @@ services:
       STORAGE_URL: http://storage
       TILE_SIZE: ${TILE_SIZE}
     deploy:
-      replicas: 1
+      replicas: ${SERVICE_CREATE_PANEL_REPLICAS}
     restart: unless-stopped

@@ -1,6 +1,5 @@
 from typing import List, Dict, Tuple
 
-PRIORITY_CONSTANT = 1000000 # 適当な大きい数値
 LARGE_GROUP_SIZE = 100 # 基本的なグループ分割のサイズ
 SMALL_GROUP_SIZE = 5 # 最初の斜め移動用のグループ分割のサイズ(早く依存タスクを開始するために小さめの値を指定する)
 
@@ -116,14 +115,12 @@ class CaptureStrategy:
             'area_id': 0,
             'x': current_x, 'y': current_y,
             'compare': [],
-            'priority': PRIORITY_CONSTANT * 4,
         })
         
         flag1 = []
         area_id = 1
         
         # PHASE 1: ジグザグ走査
-        priority = PRIORITY_CONSTANT * 3
         while True:
             # 下に移動
             new_x, new_y = self._down(current_x, current_y)
@@ -131,7 +128,6 @@ class CaptureStrategy:
                 'area_id': area_id,
                 'x': new_x, 'y': new_y,
                 'compare': [{'x': current_x, 'y': current_y}],
-                'priority': priority,
             })
             area_id += 1
             current_x, current_y = new_x, new_y
@@ -139,7 +135,6 @@ class CaptureStrategy:
             # 右下辺に到達したら終了
             if current_x == self.map_x:
                 break
-            priority -= 1
             
             # 右に移動
             new_x, new_y = self._right(current_x, current_y)
@@ -147,14 +142,12 @@ class CaptureStrategy:
                 'area_id': area_id,
                 'x': new_x, 'y': new_y,
                 'compare': [{'x': current_x, 'y': current_y}],
-                'priority': priority,
             })
             area_id += 1
             current_x, current_y = new_x, new_y
             # 右下辺に到達したら終了
             if current_x == self.map_x:
                 break
-            priority -= 1
 
             if len(screenshots[-1]) >= SMALL_GROUP_SIZE:
                 screenshots.append([])
@@ -163,10 +156,7 @@ class CaptureStrategy:
             screenshots.append([])
         
         # PHASE 2: 左方向への走査
-        priority = PRIORITY_CONSTANT * 2
         for start_point in flag1:
-            if start_point == flag1[-1]:  # 最後の行は優先度高め
-                priority = PRIORITY_CONSTANT * 2
             current_x, current_y = start_point['x'], start_point['y']
             while True:
                 new_x, new_y = self._left(current_x, current_y)
@@ -180,11 +170,9 @@ class CaptureStrategy:
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
                     'compare': compare,
-                    'priority': priority,
                 })
                 area_id += 1
                 current_x, current_y = new_x, new_y
-                priority -= 1
 
                 if len(screenshots[-1]) >= LARGE_GROUP_SIZE:
                     screenshots.append([])
@@ -196,7 +184,6 @@ class CaptureStrategy:
         last_line = flag1[-1]
         start_points = []
         current_x, current_y = last_line['x'], last_line['y']
-        priority = PRIORITY_CONSTANT
         while True:
             start_points.append({'x': current_x, 'y': current_y})
             new_x, new_y = self._left(current_x, current_y)
@@ -218,11 +205,9 @@ class CaptureStrategy:
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
                     'compare': compare,
-                    'priority': priority,
                 })
                 area_id += 1
                 current_x, current_y = new_x, new_y
-                priority -= 1
 
                 if len(screenshots[-1]) >= LARGE_GROUP_SIZE:
                     screenshots.append([])
@@ -237,14 +222,12 @@ class CaptureStrategy:
             'area_id': 0,
             'x': current_x, 'y': current_y,
             'compare': [],
-            'priority': PRIORITY_CONSTANT * 4,
         })
         
         flag1 = []
         area_id = 1
         
         # PHASE 1: ジグザグ走査（左方向）
-        privacy = PRIORITY_CONSTANT * 3
         while True:
             # 下に移動
             new_x, new_y = self._down(current_x, current_y)
@@ -252,7 +235,6 @@ class CaptureStrategy:
                 'area_id': area_id,
                 'x': new_x, 'y': new_y,
                 'compare': [{'x': current_x, 'y': current_y}],
-                'priority': privacy,
             })
             area_id += 1
             current_x, current_y = new_x, new_y
@@ -268,7 +250,6 @@ class CaptureStrategy:
                 'area_id': area_id,
                 'x': new_x, 'y': new_y,
                 'compare': [{'x': current_x, 'y': current_y}],
-                'priority': privacy,
             })
             area_id += 1
             current_x, current_y = new_x, new_y
@@ -284,10 +265,7 @@ class CaptureStrategy:
             screenshots.append([])
         
         # PHASE 2: 右方向への走査
-        priority = PRIORITY_CONSTANT * 2
         for start_point in flag1:
-            if start_point == flag1[-1]:  # 最後の行は優先度高め
-                priority = PRIORITY_CONSTANT * 2
             current_x, current_y = start_point['x'], start_point['y']
             while True:
                 new_x, new_y = self._right(current_x, current_y)
@@ -301,11 +279,9 @@ class CaptureStrategy:
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
                     'compare': compare,
-                    'priority': priority,
                 })
                 area_id += 1
                 current_x, current_y = new_x, new_y
-                priority -= 1
                 
                 if len(screenshots[-1]) >= LARGE_GROUP_SIZE:
                     screenshots.append([])
@@ -324,7 +300,6 @@ class CaptureStrategy:
                 break
             current_x, current_y = new_x, new_y
         
-        priority = PRIORITY_CONSTANT
         for start_point in start_points:
             current_x, current_y = start_point['x'], start_point['y']
             while True:
@@ -339,11 +314,9 @@ class CaptureStrategy:
                     'area_id': area_id,
                     'x': new_x, 'y': new_y,
                     'compare': compare,
-                    'priority': priority,
                 })
                 area_id += 1
                 current_x, current_y = new_x, new_y
-                priority -= 1
                 
                 if len(screenshots[-1]) >= LARGE_GROUP_SIZE:
                     screenshots.append([])

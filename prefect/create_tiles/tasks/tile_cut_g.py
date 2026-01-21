@@ -1,10 +1,10 @@
 import requests
-from create_tiles.priority_task import priority_task
-from create_tiles.config import (SERVICE_TILE_CUT_URL)
+from prefect import task
+from create_tiles.config import SERVICE_TILE_CUT_URL
 from create_tiles.utils import map_tile_to_screen_coord, parse_xy_str, check_exists, log
 from create_tiles.flow_params import CreateTilesParams
 
-@priority_task(task_type="tile_cut", retries=3, retry_delay_seconds=300)
+@task(tags=["tile-cut"], retries=3, retry_delay_seconds=300)
 def tile_cut_g(params: CreateTilesParams, gx: int, gy: int, related_areas: list, capture_results: list, estimate_results: list):
     log(f"Processing tile cut group at ({gx}, {gy}) with {len(related_areas)} related areas")
     for area in related_areas:

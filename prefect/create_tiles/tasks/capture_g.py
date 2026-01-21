@@ -1,10 +1,10 @@
 import requests
-from create_tiles.priority_task import priority_task
+from prefect import task
 from create_tiles.config import SERVICE_CAPTURE_URL, BACKEND_INTERNAL_URL
 from create_tiles.utils import check_exists, log
 from create_tiles.flow_params import CreateTilesParams
 
-@priority_task(task_type="capture", retries=3, retry_delay_seconds=300)
+@task(tags=["capture"], retries=3, retry_delay_seconds=300)
 def capture_g(params: CreateTilesParams, tasks: list):
 
     log(f"Capturing group with {len(tasks)} tasks")
