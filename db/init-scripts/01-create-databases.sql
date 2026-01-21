@@ -41,9 +41,10 @@ CREATE TABLE maps (
     -- マップ生成ジョブが始まって撮影が始まった日時(nullable)
     started_at TIMESTAMP WITH TIME ZONE NULL,
     -- マップ生成ジョブを作ってマップを登録した日時
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- UNIQUE制約を遅延評価可能にする
+    CONSTRAINT unique_maps_sort_order UNIQUE (sort_order) DEFERRABLE INITIALLY DEFERRED
 );
-CREATE UNIQUE INDEX idx_maps_sort_order ON maps(sort_order);
 
 CREATE TABLE jobs (
     id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,

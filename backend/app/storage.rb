@@ -4,20 +4,13 @@ module Storage
   BASE_URL = ENV['STORAGE_URL'] || 'http://storage'
 
   def self.delete_map(map_id)
-    # screenshots/:map_id, rawtiles/:map_id, tiles/:map_id, panels/:map_idをディレクトリごと削除する
     %w[screenshots rawtiles tiles panels].each do |category|
-      url = "#{BASE_URL}/images/#{category}/#{map_id}"
-      return unless Storage.check_exists(url)
+      url = "#{BASE_URL}/images/#{category}/#{map_id}/"
       response = HTTParty.delete(url)
+      # ディレクトリが存在しない場合は200以外のステータスコードが返ることがあるので、エラーにはしない
       unless response.code == 200
-        raise "Failed to delete #{category} for map_id #{map_id}: #{response.body}"
+        puts "Warning: Failed to delete #{url}, status code: #{response.code}"
       end
     end
-  end
-
-  def self.check_exists(path)
-    url = "#{BASE_URL}/#{path}"
-    response = HTTParty.head(url, query: { path: path })
-    response.code == 200
   end
 end

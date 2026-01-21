@@ -315,7 +315,7 @@
 - **PUT `/api/maps/:id/position` リクエストボディ**
   ```json
   {
-    "after_map_id": number | null  // このマップIDの後ろに移動。nullで先頭へ移動
+    "position": number  // 必須: 移動先の表示順序インデックス（0始まり）
   }
   ```
 

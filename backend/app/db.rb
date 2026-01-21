@@ -84,58 +84,41 @@ module DB
     )
   end
 
-  def self.update_map_sort_order(id:, sort_order:)
-    if sort_order.nil? # 先頭に移動
-      @db.transaction do
-        @db.run <<-SQL
-          UPDATE maps
-          SET sort_order = sort_order + 1
-          WHERE sort_order >= 1;
-        SQL
-        @db.run <<-SQL
-          UPDATE maps
-          SET sort_order = 1
-          WHERE id = #{id};
-        SQL
-        @db.run <<-SQL
-          WITH ordered AS (
+  def self.update_map_sort_order(id, new_position)
+    @db.transaction do
+      # 1. 移動対象のマップを一時的に退避（大きな値に設定）
+      @db.run <<-SQL
+        UPDATE maps
+        SET sort_order = 99999
+        WHERE id = #{id};
+      SQL
+
+      # 2. 挿入位置以降のマップを+1シフト
+      @db.run <<-SQL
+        UPDATE maps
+        SET sort_order = sort_order + 1
+        WHERE sort_order >= #{new_position + 1}
+          AND id != #{id};
+      SQL
+
+      # 3. 移動対象を指定位置に配置
+      @db.run <<-SQL
+        UPDATE maps
+        SET sort_order = #{new_position + 1}
+        WHERE id = #{id};
+      SQL
+
+      # 4. 正規化（念のため、連番を1から振り直し）
+      @db.run <<-SQL
+        WITH ordered AS (
             SELECT id, ROW_NUMBER() OVER (ORDER BY sort_order) as new_order
             FROM maps
-          )
-          UPDATE maps
-          SET sort_order = ordered.new_order
-          FROM ordered
-          WHERE maps.id = ordered.id;
-        SQL
-      end
-    else # orderで指定されたマップの後ろに移動
-      @db.transaction do
-        @db.run <<-SQL
-          WITH target_order AS (
-              SELECT sort_order FROM maps WHERE id = #{id}
-          )
-          UPDATE maps
-          SET sort_order = sort_order + 1
-          WHERE sort_order > (SELECT sort_order FROM target_order);
-        SQL
-
-        @db.run <<-SQL
-          UPDATE maps
-          SET sort_order = #{sort_order + 1}
-          WHERE id = #{id};
-        SQL
-
-        @db.run <<-SQL
-          WITH ordered AS (
-              SELECT id, ROW_NUMBER() OVER (ORDER BY sort_order) as new_order
-              FROM maps
-          )
-          UPDATE maps
-          SET sort_order = ordered.new_order
-          FROM ordered
-          WHERE maps.id = ordered.id;
-        SQL
-      end
+        )
+        UPDATE maps
+        SET sort_order = ordered.new_order
+        FROM ordered
+        WHERE maps.id = ordered.id;
+      SQL
     end
   end
 

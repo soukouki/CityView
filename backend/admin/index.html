@@ -772,34 +772,32 @@
           }
           
           const targetIndex = this.status.maps.findIndex(m => m.map_id === targetMap.map_id);
-          let after_map_id;
+          const draggedIndex = this.status.maps.findIndex(m => m.map_id === draggedId);
           
+          let newPosition;
           if (this.dropIndicator.position === 'before') {
-            // targetMapの前に移動
-            if (targetIndex === 0) {
-              // 先頭に移動する場合は after_map_id = null
-              after_map_id = null;
-            } else {
-              // 前のマップの後ろに移動
-              after_map_id = this.status.maps[targetIndex - 1].map_id;
-            }
+            newPosition = targetIndex;
           } else {
-            // targetMapの後ろに移動
-            after_map_id = targetMap.map_id;
+            newPosition = targetIndex + 1;
+          }
+          
+          // ドラッグ元が移動先より前にある場合は、削除により位置がずれるため調整
+          if (draggedIndex < newPosition) {
+            newPosition--;
           }
           
           this.dropIndicator = { mapId: null, position: null };
-          await this.updateMapPosition(draggedId, after_map_id);
+          await this.updateMapPosition(draggedId, newPosition);
         },
-        
-        async updateMapPosition(mapId, afterMapId) {
+
+        async updateMapPosition(mapId, position) {
           try {
             const response = await fetch(`/api/maps/${mapId}/position`, {
               method: 'PUT',
               headers: {
                 'Content-Type': 'application/json'
               },
-              body: JSON.stringify({ after_map_id: afterMapId })
+              body: JSON.stringify({ position: position })
             });
             
             if (!response.ok) {
