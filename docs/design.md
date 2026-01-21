@@ -176,7 +176,8 @@
 | GET | `/api/status` | サービスのステータス取得 | - | 下記参照 |
 | GET | `/api/options` | マップ生成オプション取得 | - | 下記参照 |
 | POST | `/api/maps` | マップ生成ジョブ作成、Flow起動 | 下記参照 | `{"job_id": "string"}` |
-
+| PUT  | `/api/maps/:id` | マップ・ジョブ更新 | 下記参照 | `{"status": "ok"}` |
+| DELETE | `/api/maps/:id` | マップ・ジョブ削除 | パスパラメータ | `{"status": "ok"}` |
 
 - **GET `/api/status` レスポンスボディ**
   ```json
@@ -269,7 +270,7 @@
   }
   ```
 
-- **POST `api/maps` リクエストボディ**
+- **POST `/api/maps` リクエストボディ**
   ```json
   {
     "name": "string",              // マップ名
@@ -296,8 +297,17 @@
       "margin_width": number,      // 画像の左右のりしろ幅(px)
       "margin_height": number,     // 画像の上下のりしろ高さ(px)
       "effective_width": number,   // 画像ののりしろを除いた有効幅(px)
-      "effective_height": number,  // 画像ののりしろを除いた有効高さ(px)
+      "effective_height": number   // 画像ののりしろを除いた有効高さ(px)
     }
+  }
+  ```
+
+- **PUT `/api/maps/:id` リクエストボディ**
+  ```json
+  {
+    "name": "string",              // マップ名
+    "description": "string",       // マップの説明
+    "copyright": "string"          // 著作権表記
   }
   ```
 

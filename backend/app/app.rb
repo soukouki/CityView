@@ -156,7 +156,7 @@ class AdminApp < Sinatra::Base
       map_size_x: request_body.dig('map_size', 'x'),
       map_size_y: request_body.dig('map_size', 'y'),
       zoom_level: request_body['zoom_level'],
-      status: 'processing'
+      status: 'processing',
     )
 
     # Prefect Flow起動
@@ -204,10 +204,45 @@ class AdminApp < Sinatra::Base
     job_id = DB.create_job(
       map_id: map_id,
       prefect_run_id: flow_run_id,
-      name: "Map #{map_id} - #{request_body['save_data_name']}"
+      name: "Map #{map_id} - #{request_body['save_data_name']}",
     )
 
     { job_id: job_id.to_s }.to_json
+  end
+
+  put '/api/maps/:id' do
+    content_type :json
+    
+    begin
+      request_body = JSON.parse(request.body.read)
+    rescue JSON::ParserError
+      halt 400, { error: 'Invalid JSON' }.to_json
+    end
+
+    map = DB.find_map(params[:id].to_i)
+    halt 404, { error: 'Map not found' }.to_json unless map
+
+    DB.update_map_metadata(
+      id: params[:id].to_i,
+      name: request_body['name'],
+      description: request_body['description'],
+      copyright: request_body['copyright'],
+    )
+
+    { status: 'ok' }.to_json
+  end
+
+  delete '/api/maps/:id' do
+    content_type :json
+    
+    map = DB.find_map(params[:id].to_i)
+    halt 404, { error: 'Map not found' }.to_json unless map
+
+    DB.delete_map(params[:id].to_i)
+
+    Storage.delete_map(params[:id].to_i)
+
+    { status: 'ok' }.to_json
   end
 end
 
@@ -250,7 +285,7 @@ class InternalApp < Sinatra::Base
       map_id: request_body['map_id'],
       game_tile_x: request_body.dig('game_tile', 'x') || 0,
       game_tile_y: request_body.dig('game_tile', 'y') || 0,
-      path: request_body['path']
+      path: request_body['path'],
     )
 
     { screenshot_id: screenshot_id.to_s }.to_json
@@ -282,7 +317,7 @@ class InternalApp < Sinatra::Base
     DB.update_screenshot_coordinates(
       params[:id].to_i,
       estimated_screen_x: request_body['estimated_screen_x'],
-      estimated_screen_y: request_body['estimated_screen_y']
+      estimated_screen_y: request_body['estimated_screen_y'],
     )
 
     { status: 'ok' }.to_json
@@ -309,7 +344,7 @@ class InternalApp < Sinatra::Base
       name: request_body['name'],
       path: request_body['path'],
       resolution_width: request_body.dig('resolution', 'width') || 0,
-      resolution_height: request_body.dig('resolution', 'height') || 0
+      resolution_height: request_body.dig('resolution', 'height') || 0,
     )
 
     { panel_id: panel_id.to_s }.to_json

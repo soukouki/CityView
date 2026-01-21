@@ -70,6 +70,23 @@ module DB
     @db[:maps].where(id: id).update(published_at: Time.now)
   end
 
+  def self.update_map_metadata(
+    id:,
+    name:,
+    description:,
+    copyright:
+  )
+    @db[:maps].where(id: id).update(
+      name: name,
+      description: description,
+      copyright: copyright
+    )
+  end
+
+  def self.delete_map(id)
+    @db[:maps].where(id: id).delete
+  end
+
   # ========================================
   # Jobs
   # ========================================
