@@ -38,6 +38,7 @@ async def ensure_concurrency_limits():
         "tile-merge": CONCURRENCY_TILE_MERGE,
         "tile-compress": CONCURRENCY_TILE_COMPRESS,
         "panel": CONCURRENCY_CREATE_PANEL,
+        "create-tiles-lock": 1, # グローバルな並行実行制限
     }
     print(f"Desired concurrency limits: {concurrency_limits}")
     # タグベースの並行実行制限
@@ -55,7 +56,8 @@ async def ensure_concurrency_limits():
                     print(f"  ✓ Updated tag '{tag}' limit to {limit}")
                 else:
                     print(f"  ✓ Tag '{tag}' limit is already {limit}")
-            except Exception:
+            except Exception as e:
+                print(f"  Creating tag '{tag}'... (previous error: {e})")
                 await client.create_concurrency_limit(
                     tag=tag,
                     concurrency_limit=limit
@@ -99,15 +101,15 @@ def create_tiles(
         capture=capture,
     )
 
+    print("Ensuring concurrency limits before starting flow...")
+    asyncio.run(ensure_concurrency_limits())
+
     # グローバルな並行実行制限を強制
     with concurrency("create-tiles-lock", occupy=1):
         # 実際の処理
         create_tiles_main(params)
 
 def create_tiles_main(params: CreateTilesParams):
-    print("Ensuring concurrency limits...")
-    asyncio.run(ensure_concurrency_limits())
-
     strategy = CaptureStrategy(
         map_x=params.map_size.x,
         map_y=params.map_size.y,

@@ -130,11 +130,13 @@ services:
       echo 'Deleting old work pool if exists...' &&
       prefect work-pool delete default-agent-pool || true &&
       echo 'Creating new work pool with concurrency limit...' &&
-      prefect work-pool create default-agent-pool --type process --set-as-default &&
+      prefect work-pool create default-agent-pool --type process --set-as-default  &&
+      echo 'Setting work pool concurrency limit to 1...' &&
+      prefect work-pool set-concurrency-limit default-agent-pool 1 &&
       echo 'Creating global concurrency limit...' &&
       prefect concurrency-limit create create-tiles-lock 1 || true &&
       echo 'Creating work queue for create-tiles...' &&
-      prefect work-queue create create-tiles-queue --pool default-agent-pool --limit 1 || true &&
+      prefect work-queue create create-tiles-queue --pool default-agent-pool || true &&
       echo 'Deploying flows...' &&
       cd /opt/prefect/flows &&
       prefect deploy --all &&

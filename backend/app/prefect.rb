@@ -10,11 +10,9 @@ module Prefect
       headers: { 'Content-Type' => 'application/json' },
       body: { parameters: parameters }.to_json
     )
-
     unless response.success?
       raise "Prefect API error: #{response.code} - #{response.body}"
     end
-
     JSON.parse(response.body)
   end
 
@@ -23,16 +21,26 @@ module Prefect
       "#{BASE_URL}/flow_runs/#{flow_run_id}",
       headers: { 'Content-Type' => 'application/json' }
     )
-
     unless response.success?
       raise "Prefect API error: #{response.code} - #{response.body}"
     end
-
     JSON.parse(response.body)
   end
 
   def self.get_flow_run_state(flow_run_id)
     flow_run = get_flow_run(flow_run_id)
     flow_run.dig('state', 'name') || 'Unknown'
+  end
+
+  def self.cancel_flow_run(flow_run_id)
+    response = HTTParty.post(
+      "#{BASE_URL}/flow_runs/#{flow_run_id}/set_state",
+      headers: { 'Content-Type' => 'application/json' },
+      body: { state: { name: 'Cancelling', type: 'CANCELLING' }, force: true }.to_json
+    )
+    unless response.success?
+      raise "Prefect API error: #{response.code} - #{response.body}"
+    end
+    JSON.parse(response.body)
   end
 end

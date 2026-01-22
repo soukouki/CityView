@@ -135,6 +135,9 @@ module ServiceCapture
       puts "Game booted. Ensuring building display..."
       wait_for_building_display!
 
+      puts "Wait a moment for stabilization..."
+      sleep 5
+
       puts "Clear Window in game..."
       @x11_controller.clear_window
 

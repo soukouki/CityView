@@ -256,6 +256,16 @@ class AdminApp < Sinatra::Base
     map = DB.find_map(params[:id].to_i)
     halt 404, { error: 'Map not found' }.to_json unless map
 
+    # もしPrefect Flowが動いていたらキャンセル
+    job = DB.find_job_by_map_id(params[:id].to_i)
+    if job && job[:prefect_run_id]
+      begin
+        Prefect.cancel_flow_run(job[:prefect_run_id])
+      rescue => e
+        puts "Failed to cancel Prefect flow run #{job[:prefect_run_id]}: #{e.message}"
+      end
+    end
+
     DB.delete_map(params[:id].to_i)
 
     Storage.delete_map(params[:id].to_i)
@@ -339,6 +349,23 @@ class InternalApp < Sinatra::Base
     )
 
     { status: 'ok' }.to_json
+  end
+
+  # 指定座標のスクリーンショット取得
+  get '/api/screenshots/by_tile' do
+    content_type :json
+    map_id = params['map_id']&.to_i
+    x = params['x']&.to_i
+    y = params['y']&.to_i
+    unless map_id && x && y
+      halt 400, { error: 'Missing required query parameters', details: 'map_id, x, y are required' }.to_json
+    end
+    screenshot = DB.find_screenshot_by_tile(map_id, x, y)
+    if screenshot
+      screenshot.to_json
+    else
+      nil.to_json
+    end
   end
 
   # パネル作成

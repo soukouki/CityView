@@ -195,6 +195,14 @@ module DB
     @db[:screenshots].where(id: id).first
   end
 
+  def self.find_screenshot_by_tile(map_id, x, y)
+    @db[:screenshots].where(
+      map_id: map_id,
+      game_tile_x: x,
+      game_tile_y: y
+    ).first
+  end
+
   def self.update_screenshot_coordinates(id, estimated_screen_x:, estimated_screen_y:)
     @db[:screenshots].where(id: id).update(
       estimated_screen_x: estimated_screen_x,

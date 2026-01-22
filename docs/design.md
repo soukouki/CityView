@@ -325,6 +325,7 @@
 | POST | `/api/screenshots` | スクリーンショット情報を登録 | 下記参照 | `{"screenshot_id": "string"}` |
 | GET | `/api/screenshots/:id` | スクリーンショット情報を取得 | パスパラメータ | 下記参照 |
 | PUT | `/api/screenshots/:id` | スクリーンショットの推定座標を更新 | 下記参照 | `{"status": "ok"}` |
+| GET | `/api/screenshots/by_tile` | 指定座標のスクリーンショット情報を取得 | `{"map_id": number, "x": number, "y": number}` | 下記参照 |
 | POST | `/api/panels` | パネル（一枚絵）情報を登録 | 下記参照 | `{"panel_id": "string"}` |
 | PUT | `/api/maps/:id/started_at` | マップ生成開始日時を更新 | パスパラメータ | `{"status": "ok"}` |
 | PUT | `/api/maps/:id/status` | マップのステータスを更新 | 下記参照 | `{"status": "ok"}` |
@@ -361,6 +362,20 @@
     "estimated_screen_x": number,
     "estimated_screen_y": number
   }
+  ```
+
+- **GET `/api/screenshots/by_tile` レスポンスボディ**
+  ```json
+  {
+    "id": number,
+    "map_id": number,
+    "game_tile_x": number,
+    "game_tile_y": number,
+    "path": "string",
+    "estimated_screen_x": number | null,
+    "estimated_screen_y": number | null,
+    "created_at": "string"  // ISO 8601日時形式
+  } | null  // 該当なしの場合はnull
   ```
 
 - **POST `/api/panels` リクエストボディ**

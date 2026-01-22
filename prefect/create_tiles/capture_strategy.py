@@ -242,7 +242,6 @@ class CaptureStrategy:
             # 左下辺に到達したら終了
             if current_y == self.map_y:
                 break
-            privacy -= 1
             
             # 左に移動
             new_x, new_y = self._left(current_x, current_y)
@@ -256,7 +255,6 @@ class CaptureStrategy:
             # 左下辺に到達したら終了
             if current_y == self.map_y:
                 break
-            privacy -= 1
             
             if len(screenshots[-1]) >= SMALL_GROUP_SIZE:
                 screenshots.append([])
