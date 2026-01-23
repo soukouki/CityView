@@ -20,41 +20,23 @@ Simutrans CityViewとは、Simutransの画面を撮影し、ブラウザから�
 
 ## CityViewの仕組み
 
-<style>
-/* 横並びで配置*/
-.split {
-  display: flex;
-  gap: 32px;
-}
-.split > * {
-  flex: 1;
-}
+<div style="display: flex; flax-direction: column; align-items: center;">
+<div style="display: flex; gap: 32px;">
+<div style="flex: 1;">
 
-/* 左右を中央に揃えて縦に並べる */
-.center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-</style>
-
-<div class="center">
-<div class="split">
-<div>
-
-![](docs/images/screenshot.png)
+![w:400](docs/images/screenshot.png)
 SimutransをDockerコンテナで起動し、スクリーンショットを撮影
 
 </div>
-<div>
+<div style="flex: 1;">
 
-![](docs/images/estimate.png)
+![w:400](docs/images/estimate.png)
 スクショ位置はかなり誤差があるので、位置合わせをする
 
 </div>
-<div>
+<div style="flex: 1;">
 
-![](docs/images/tile_cut.png)
+![w:400](docs/images/tile_cut.png)
 地図描画ライブラリ向けに、正方形のタイルに切り出す※
 
 </div>
