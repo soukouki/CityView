@@ -219,3 +219,11 @@ services:
     deploy:
       replicas: ${SERVICE_CREATE_PANEL_REPLICAS}
     restart: unless-stopped
+
+  cloudflare-tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
