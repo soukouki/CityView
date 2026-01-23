@@ -4,7 +4,7 @@ from create_tiles.config import SERVICE_ESTIMATE_URL, BACKEND_INTERNAL_URL
 from create_tiles.utils import game_tile_to_screen_lefttop_coord, parse_xy_str, log
 from create_tiles.flow_params import CreateTilesParams
 
-@task(tags=["estimate"], retries=5, retry_delay_seconds=20)
+@task(tags=["all", "estimate"], retries=5, retry_delay_seconds=20)
 def estimate_g(params: CreateTilesParams, group: list, capture_results: list, estimate_results: list):
     # どんなデータが来るか確認するためのデバッグ出力
     log("Estimating group")

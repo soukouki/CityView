@@ -4,7 +4,7 @@ from create_tiles.config import SERVICE_TILE_CUT_URL
 from create_tiles.utils import map_tile_to_screen_coord, parse_xy_str, check_exists, log
 from create_tiles.flow_params import CreateTilesParams
 
-@task(tags=["tile-cut"], retries=5, retry_delay_seconds=20)
+@task(tags=["all", "tile-cut"], retries=5, retry_delay_seconds=20)
 def tile_cut_g(params: CreateTilesParams, gx: int, gy: int, related_areas: list, capture_results: list, estimate_results: list):
     log(f"Processing tile cut group at ({gx}, {gy}) with {len(related_areas)} related areas")
     for area in related_areas:

@@ -10,7 +10,7 @@ from create_tiles.utils import (
 )
 from create_tiles.flow_params import CreateTilesParams
 
-@task(tags=["panel"], retries=5, retry_delay_seconds=20)
+@task(tags=["all", "panel"], retries=5, retry_delay_seconds=20)
 def create_panel(params: CreateTilesParams, z: int, resolution: dict, tile_results: list):
     log(f"Creating panel at zoom level {z} with resolution {resolution}")
     log(f"Received {len(tile_results)} tile groups")

@@ -20,6 +20,7 @@ from create_tiles.config import (
     CONCURRENCY_TILE_MERGE,
     CONCURRENCY_TILE_COMPRESS,
     CONCURRENCY_CREATE_PANEL,
+    CONCURRENCY_ALL,
 )
 from create_tiles.tasks.capture_g import capture_g
 from create_tiles.tasks.estimate_g import estimate_g
@@ -32,6 +33,7 @@ from create_tiles.flow_params import CreateTilesParams, MapSize, ZoomLevel, Tile
 async def ensure_concurrency_limits():
     """並行実行制限が存在することを確認（存在しなければ作成）"""
     concurrency_limits = {
+        "all": CONCURRENCY_ALL,
         "capture": CONCURRENCY_CAPTURE,
         "estimate": CONCURRENCY_ESTIMATE,
         "tile-cut": CONCURRENCY_TILE_CUT,
