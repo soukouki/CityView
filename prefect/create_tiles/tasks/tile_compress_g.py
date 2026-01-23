@@ -4,7 +4,7 @@ from create_tiles.config import SERVICE_TILE_COMPRESS_URL
 from create_tiles.utils import parse_zxy_str, check_exists, log
 from create_tiles.flow_params import CreateTilesParams
 
-@task(tags=["tile-compress"], retries=3, retry_delay_seconds=20)
+@task(tags=["tile-compress"], retries=5, retry_delay_seconds=20)
 def tile_compress_g(params: CreateTilesParams, z: int, gx: int, gy: int, tile_results: dict, quality: str):
     log(f"Processing tile compress group at z={z}, ({gx}, {gy}) with {len(tile_results)} tiles")
     
