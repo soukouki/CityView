@@ -316,6 +316,9 @@
                 initMap() {
                     if (this.selectedMapId === null) return;
                     
+                    const pixelRatio = window.devicePixelRatio || 1;
+                    const adjustedTileSize = pixelRatio > 1 ? Math.round(512 / pixelRatio) : 512;
+                    
                     this.map = new maplibregl.Map({
                         container: 'map',
                         style: {
@@ -326,7 +329,7 @@
                                     tiles: [
                                         `/tiles/${this.selectedMapId}/{z}/{x}/{y}.avif`
                                     ],
-                                    tileSize: 512
+                                    tileSize: adjustedTileSize
                                 }
                             },
                             layers: [{
