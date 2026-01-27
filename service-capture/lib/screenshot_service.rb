@@ -168,7 +168,6 @@ module ServiceCapture
       raise
     end
 
-    # 愚直に書きすぎたかもしれない
     def zoom!(level, redraw_wait)
       zoom_levels = ["one_eighth", "quarter", nil, "half", nil, nil, "normal", nil, nil, "double"] # ゲーム内でのズームレベル対応
       current_index = zoom_levels.index(@game_manager.current_zoom_level)

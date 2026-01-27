@@ -99,6 +99,7 @@ module ServiceCapture
         config.save_data_name,
         "-pause",
         "-fullscreen",
+        "-singleuser",
       ]
 
       env = {
@@ -135,11 +136,10 @@ module ServiceCapture
       puts "Game booted. Ensuring building display..."
       wait_for_building_display!
 
-      puts "Wait a moment for stabilization..."
-      sleep 5
-
       puts "Clear Window in game..."
       @x11_controller.clear_window
+
+
 
       puts "Game ready."
     end
