@@ -139,30 +139,39 @@ module ServiceCapture
     end
 
     def wait_for_scrot(future, request_id)
+      begin_time = Time.now
       future.value!(@scrot_timeout)
-    rescue Concurrent::TimeoutError
-      warn "[scrot] request_id=#{request_id} error=timeout"
-      raise ServiceCapture::Errors::CommandFailed.new("scrot", "scrot timed out after #{@scrot_timeout}s")
+      end_time = Time.now
+      puts "[scrot] request_id=#{request_id} duration=#{((end_time - begin_time) * 1000).round}ms"
+      if end_time - begin_time >= @scrot_timeout
+        raise ServiceCapture::Errors::TimeoutError, @scrot_timeout, "scrot operation"
+      end
     rescue => e
       warn "[scrot] request_id=#{request_id} error=#{e.class} msg=#{e.message}"
       raise
     end
 
     def wait_for_crop(future, request_id)
+      begin_time = Time.now
       future.value!(@crop_timeout)
-    rescue Concurrent::TimeoutError
-      warn "[crop] request_id=#{request_id} error=timeout"
-      raise ServiceCapture::Errors::CommandFailed.new("crop", "crop timed out after #{@crop_timeout}s")
+      end_time = Time.now
+      puts "[crop] request_id=#{request_id} duration=#{((end_time - begin_time) * 1000).round}ms"
+      if end_time - begin_time >= @crop_timeout
+        raise ServiceCapture::Errors::TimeoutError, @crop_timeout, "crop operation"
+      end
     rescue => e
       warn "[crop] request_id=#{request_id} error=#{e.class} msg=#{e.message}"
       raise
     end
 
     def wait_for_upload(future, request_id)
+      begin_time = Time.now
       future.value!(@upload_timeout)
-    rescue Concurrent::TimeoutError
-      warn "[upload] request_id=#{request_id} error=timeout"
-      raise ServiceCapture::Errors::StorageError, "upload timed out after #{@upload_timeout}s"
+      end_time = Time.now
+      puts "[upload] request_id=#{request_id} duration=#{((end_time - begin_time) * 1000).round}ms"
+      if end_time - begin_time >= @upload_timeout
+        raise ServiceCapture::Errors::TimeoutError, @upload_timeout, "upload operation"
+      end
     rescue => e
       warn "[upload] request_id=#{request_id} error=#{e.class} msg=#{e.message}"
       raise

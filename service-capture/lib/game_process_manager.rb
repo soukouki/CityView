@@ -139,7 +139,9 @@ module ServiceCapture
       puts "Clear Window in game..."
       @x11_controller.clear_window
 
-
+      # 5秒待ったとしてもうまく画面移動が出来ていないケースが頻発しているため、試しに(0,0)に移動して移動ができることを確認してから撮影を始める
+      puts "Verify that screen navigation works correctly"
+      wait_for_move_completion!
 
       puts "Game ready."
     end
@@ -244,6 +246,39 @@ module ServiceCapture
       # Timed out
       stop
       raise ServiceCapture::Errors::GameBootTimeout, "boot check timed out"
+    # ピクセルの色チェックで失敗した場合もタイムアウト扱いとする
+    rescue ServiceCapture::Errors::CommandFailed => e
+      stop
+      raise ServiceCapture::Errors::GameBootTimeout, "boot check failed: #{e.message}"
+    end
+
+    # (0,0)に移動・撮影・画面上側の適当な箇所を撮影して#404040であることを確認
+    def wait_for_move_completion!
+      count = 0
+      max_retries = 5
+      tmp_path = "/tmp/service-capture/movecheck.png"
+
+      while count < max_retries
+        puts "  Move attempt #{count + 1}/#{max_retries}"
+        @x11_controller.move_to_coordinate(0, 0)
+        sleep 2 # 移動待ち
+
+        @x11_controller.screenshot_full(tmp_path)
+
+        gray = pixel_gray?(tmp_path, 100, 100) # 画面上側の適当な箇所をチェック
+        if gray
+          puts "  Move verified successfully."
+          return
+        else
+          puts "  Move verification failed, retrying..."
+        end
+
+        count += 1
+      end
+
+      # 5回試してもうまくいかない場合は例外を投げる
+      stop
+      raise ServiceCapture::Errors::MovingError, "failed to verify screen move after #{max_retries} attempts"
     end
 
     # 一瞬だけunpauseして、建物表示を行ってからまたpauseする
@@ -254,17 +289,31 @@ module ServiceCapture
     end
 
     def pixel_black?(image_path, x, y)
-      # Use ImageMagick convert to get pixel as rgb integer.
-      # Example output: "srgb(0,0,0)" or "srgb(12,34,56)"
+      pixel_color?(image_path, x, y, [0, 0, 0])
+    end
+
+    def pixel_gray?(image_path, x, y)
+      pixel_color?(image_path, x, y, [64, 64, 64]) # #404040
+    end
+
+    # This method may raise Errors::CommandFailed
+    def pixel_color?(image_path, x, y, target_rgb)
       res = ServiceCapture::CommandRunner.run!(
         ["convert", image_path, "-format", "%[pixel:p{#{x},#{y}}]", "info:"]
       )
       val = res[:stdout].strip
-      # Accept both srgb() and rgb() forms; treat exactly 0,0,0 as black.
-      val.match?(/\A(?:s?rgb)\(0,0,0\)\z/)
-    rescue ServiceCapture::Errors::CommandFailed
-      # If check fails, assume still booting
-      true
+      # Extract rgb values
+      if val =~ /\A(?:s?rgb)\((\d+),(\d+),(\d+)\)\z/
+        r = $1.to_i
+        g = $2.to_i
+        b = $3.to_i
+        puts "  Pixel at (#{x},#{y}): R=#{r} G=#{g} B=#{b}"
+        # 例えば背景(#404040が理想)を撮影すると、#414041のように微妙にずれることがあるため、閾値を設けて近似判定をする
+        diff = (r - target_rgb[0]).abs + (g - target_rgb[1]).abs + (b - target_rgb[2]).abs
+        threshold = 10
+        return diff <= threshold
+      end
+      false
     end
   end
 end

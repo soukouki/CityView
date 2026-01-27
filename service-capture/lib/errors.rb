@@ -27,7 +27,18 @@ module ServiceCapture
       end
     end
 
+    class TimeoutError < Base
+      attr_reader :seconds, :operation
+
+      def initialize(seconds, operation)
+        @seconds = seconds
+        @operation = operation
+        super("operation timed out after #{seconds} seconds: #{operation}")
+      end
+    end
+
     class GameBootTimeout < Base; end
     class StorageError < Base; end
+    class MovingError < Base; end
   end
 end
