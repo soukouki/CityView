@@ -144,7 +144,7 @@ module ServiceCapture
       end_time = Time.now
       puts "[scrot] request_id=#{request_id} duration=#{((end_time - begin_time) * 1000).round}ms"
       if end_time - begin_time >= @scrot_timeout
-        raise ServiceCapture::Errors::TimeoutError, @scrot_timeout, "scrot operation"
+        raise ServiceCapture::Errors::TimeoutError.new(@scrot_timeout, "scrot operation")
       end
     rescue => e
       warn "[scrot] request_id=#{request_id} error=#{e.class} msg=#{e.message}"
@@ -157,7 +157,7 @@ module ServiceCapture
       end_time = Time.now
       puts "[crop] request_id=#{request_id} duration=#{((end_time - begin_time) * 1000).round}ms"
       if end_time - begin_time >= @crop_timeout
-        raise ServiceCapture::Errors::TimeoutError, @crop_timeout, "crop operation"
+        raise ServiceCapture::Errors::TimeoutError.new(@crop_timeout, "crop operation")
       end
     rescue => e
       warn "[crop] request_id=#{request_id} error=#{e.class} msg=#{e.message}"
@@ -170,7 +170,7 @@ module ServiceCapture
       end_time = Time.now
       puts "[upload] request_id=#{request_id} duration=#{((end_time - begin_time) * 1000).round}ms"
       if end_time - begin_time >= @upload_timeout
-        raise ServiceCapture::Errors::TimeoutError, @upload_timeout, "upload operation"
+        raise ServiceCapture::Errors::TimeoutError.new(@upload_timeout, "upload operation")
       end
     rescue => e
       warn "[upload] request_id=#{request_id} error=#{e.class} msg=#{e.message}"
