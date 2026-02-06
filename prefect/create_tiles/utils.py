@@ -1,7 +1,43 @@
 import sys
+import threading
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from create_tiles.flow_params import CreateTilesParams
 from create_tiles.config import STORAGE_URL
+
+# スレッドローカルストレージ（Prefectの並列実行に対応）
+_thread_local = threading.local()
+
+def get_session():
+    """
+    スレッドセーフなHTTP Sessionを取得。
+    同じスレッド内では同一のSessionを使い回す（TCPコネクション再利用）。
+    """
+    if not hasattr(_thread_local, "session"):
+        session = requests.Session()
+        
+        # コネクションプール設定（storage, backend, capture-service への接続を最適化）
+        adapter = HTTPAdapter(
+            pool_connections=50,  # 同時接続数に応じて調整
+            pool_maxsize=50,      # プールサイズ
+            max_retries=Retry(
+                total=3,
+                backoff_factor=0.5,
+                status_forcelist=[500, 502, 503, 504],
+                allowed_methods=["HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS", "TRACE"]
+            )
+        )
+        
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        
+        _thread_local.session = session
+    
+    return _thread_local.session
+
+def close_session(session: requests.Session):
+    session.close()
 
 # ゲーム内タイル座標系とスクショ座標系の変換式
 def game_tile_to_screen_coord(params: CreateTilesParams, tile_x: int, tile_y: int) -> tuple[int, int]:
@@ -57,11 +93,10 @@ def parse_zxy_str(zxy_str: str) -> tuple[int, int, int]:
     return z, x, y
 
 # ストレージにすでに存在するかを確認する
-def check_exists(output_path: str) -> bool:
+def check_exists(output_path: str, session: requests.Session) -> bool:
     url = f"{STORAGE_URL}{output_path}"
-    response = requests.head(url)
+    response = session.head(url)
     return response.status_code == 200
 
 def log(*args):
     print(*args, file=sys.stdout, flush=True)
-
