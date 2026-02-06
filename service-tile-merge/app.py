@@ -122,7 +122,7 @@ def merge_tiles():
         
         # PNG形式でエンコード（未圧縮）
         output_buffer = io.BytesIO()
-        resized_image.save(output_buffer, format='PNG', compress_level=0)
+        resized_image.save(output_buffer, format='PNG', compress_level=3) # あるていどの圧縮はしておく
         resized_image.close()
         output_buffer.seek(0)
         tile_data = output_buffer.getvalue()

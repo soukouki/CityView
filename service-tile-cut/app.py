@@ -196,7 +196,7 @@ def cut_tile():
         
         # PNG形式でエンコード
         output_buffer = io.BytesIO()
-        tile_image.save(output_buffer, format='PNG', compress_level=3) # あるていどの圧縮はしておく。無圧縮では4000x5000マップで4倍ズーム時にrawtilesが34GBとかになる
+        tile_image.save(output_buffer, format='PNG', compress_level=3) # あるていどの圧縮はしておく
         tile_image.close()
         output_buffer.seek(0)
         tile_data = output_buffer.getvalue()
