@@ -1,6 +1,7 @@
 from typing import List, Dict, Tuple
 
-LARGE_GROUP_SIZE = 100 # 基本的なグループ分割のサイズ
+# 前はLARGEを100にしてたけれど、実際に撮影してみるとpak128の等倍撮影で4000x5000マップでも3000枚程度なので、並列度を確保するために小さくした。
+LARGE_GROUP_SIZE = 5 # 基本的なグループ分割のサイズ
 SMALL_GROUP_SIZE = 5 # 最初の斜め移動用のグループ分割のサイズ(早く依存タスクを開始するために小さめの値を指定する)
 
 class CaptureStrategy:
